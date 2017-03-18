@@ -1,3 +1,4 @@
+#include <LiquidCrystal.h>
 #define DURATACLICKLUNGO 2000000 // tempo pressione pulsante per click lungo = 2 secondi
 #define TBACKOUTPULSANTE 10000 // tempo blackout pulsante dopo un click
 //stati
@@ -8,6 +9,15 @@
 
 #define pinPULSANTE 11
 
+class Display {
+	public:
+		Display(rs, enable, d4, d5, d6, d7);
+		Print(char *);
+		
+}
+Display::Print(char* s) {
+	
+}
 class Slave {
   public:
     unsigned long oravoto;
@@ -35,16 +45,17 @@ byte Stato::getStato() {return stato;};
 void Stato::setStato(byte newstato) {
   switch(newstato) {
     case ZERO:
-      //aggiorna disply
+	  disp.print(0,F("Pronto"));
       Serial.println(F("s 0"));
     case DISCOVERY:
-      //aggiorna disply
+	  disp.print(0,F("Ricerca dispositivi"));
+	  disp.print(1,F("Trovati: "));
       Serial.println(F("s 1"));
     case INVIASYNC:
-      //aggiorna disply
+	  disp.print(0,F("Invio sincronismo"));
       Serial.println(F("s 2"));
     case VOTO:
-      //aggiorna disply
+	  disp.print(0,F("Pronto per gara"));
       Serial.println(F("s 0"));
     default:
       char s[50];
@@ -58,13 +69,14 @@ void Stato::setStato(byte newstato) {
 Stato stato;
 Slave* slave[255];
 byte numero_slave;
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
 
 void setup() {
-  // put your setup code here, to run once:
   pinMode(pinPULSANTE, INPUT_PULLUP);
   Serial.begin(115200);
   Serial.println("Setup");
+  lcd.begin(16, 2);
   stato.setStato(ZERO);
 }
 // algoritmo 1
@@ -120,9 +132,8 @@ void Discovery() {
     slave[numero_slave]->tensionebatteria=risposta.tensionebatteria;
     slave[numero_slave]->rssi=risposta.rssi;
     slave[numero_slave]->funzionante=true;
-
-    AggiornaDisplayDiscovery(numero_slave);
-    byte msg[19];
+	disp.print(1,10,numero_slave);
+	byte msg[19];
     sprintf(msg,(char *)F("d %d %d %d"),indirizzo_slave_corrente,slave[numero_slave]->tensionebatteria, slave[numero_slave]->rssi);
     Serial.println(msg);
     numero_slave++;
@@ -158,7 +169,8 @@ bool inviaSync() {
       if(retry==3) {
         stato.setStato(0);
         Msg(F("Slave non funzionante") + slave[i].indirizzo);
-        return false;
+		disp.print(3,0,("Pulsante");
+	        return false;
       }
     }
   }
