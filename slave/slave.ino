@@ -80,11 +80,26 @@ void ElaboraCmdDiscovery(byte * pkt) {
 }
 
 void ProcessaDatiSeriali() {
+	static byte comando=0;prossimodato=0;
 	if(Serial.available()) {
-		byte c=Serial.read();
+		byte c=toupper(Serial.read();
+		if(c=='\n') return;
+		if(c=='\r') {
+			// elabora il comando
+			
+		}
+		
 		if(prossimodato==COMANDO) {
-			comando=c;
-			prossimodato=VALORE;
+			if(toupper(c)=='W') {
+				comando=c;
+				prossimodato=VALORE;
+			}
+		}
+		if(prossimodato==VALORE) {
+			if(toupper(c)=='W') {
+				comando=c;
+				prossimodato=VALORE;
+			}
 		}
 		
 	}
