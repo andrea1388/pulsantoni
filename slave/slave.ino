@@ -80,25 +80,39 @@ void ElaboraCmdDiscovery(byte * pkt) {
 }
 
 void ProcessaDatiSeriali() {
-	static byte comando=0;prossimodato=0;
+	static byte comando=0;prossimodato=0,k=0,valore[5];
 	if(Serial.available()) {
-		byte c=toupper(Serial.read();
-		if(c=='\n') return;
+		byte c=Serial.read();
+		if(c=='\n' || c==' ') return;
 		if(c=='\r') {
 			// elabora il comando
-			
-		}
-		
-		if(prossimodato==COMANDO) {
-			if(toupper(c)=='W') {
-				comando=c;
-				prossimodato=VALORE;
+			if(comando=='W') {
+				// scrivi indirizzo slave sul byte 0 della eeprom
+				int ind=atoi(valore);
+				if(ind<1 || ind>255) {
+					Serial.println(F("parametro errato"));	
+				} else {
+					EEPROM.write(0,ind);
+					Serial.println(F("indirizzo memorizzato"));
+				}
+			} else {
+				Serial.println(F("comando errato"));	
 			}
+			k=0;
+			prossimodato=COMANDO;			
+
+		}
+		if(prossimodato==COMANDO) {
+			c=topper(c);
+			comando=c;
+			prossimodato=VALORE;
+			k=0;
 		}
 		if(prossimodato==VALORE) {
-			if(toupper(c)=='W') {
-				comando=c;
-				prossimodato=VALORE;
+			valore[k++]=c;
+			if(k>3) {
+				k=0;
+				prossimodato=COMANDO;			
 			}
 		}
 		
