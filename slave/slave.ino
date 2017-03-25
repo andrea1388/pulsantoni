@@ -4,14 +4,15 @@
 #define pinPULSANTE 11
 #define PINBATTERIA 12 // per lettura tensione batteria 
 #define TIMEOUTVOTO 1200000000 // 20 minuti
+// parametri radio
 #define NETWORKID 27
+#define FREQUENCY 917000000
 #define MASTER 0
 #define LEDPIN LED_BUILTIN
 // stati per elaborazione seriale
 #define COMANDO 0
 #define VALORE 0
 
-#define FREQUENCY 917000000
 
 unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledciclo, Tledon;
 bool pulsantegiapremuto;
@@ -21,15 +22,6 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(pinPULSANTE, INPUT_PULLUP);
   byte indirizzo = EEPROM.read(0);
-  radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
-  radio.writeReg(0x03,0x0D); // 9k6
-  radio.writeReg(0x04,0x05);
-  /*
-  radio.writeReg(0x03,0x00); // 153k6
-  radio.writeReg(0x04,0xD0);
-  */
-  radio.setFrequency(FREQUENCY);
-  radio.setHighPower(); 
   Serial.begin(115200);
   Serial.println(F("Setup"));
   Serial.print(F("Indirizzo: "));
@@ -37,6 +29,7 @@ void setup() {
   pinMode(LEDPIN, OUTPUT);
   digitalWrite(LEDPIN, LOW);
   impostaled(3000,300);
+  radioSetup(indirizzo);
   radio.readAllRegs();
 }
 
@@ -167,6 +160,18 @@ void ProcessaDatiSeriali() {
     }
     
   }
-  
-}
 
+  }
+  
+
+void radioSetup(byte indirizzo) {
+	radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
+	radio.writeReg(0x03,0x0D); // 9k6
+	radio.writeReg(0x04,0x05);
+	/*
+	radio.writeReg(0x03,0x00); // 153k6
+	radio.writeReg(0x04,0xD0);
+	*/
+	radio.setFrequency(FREQUENCY);
+	radio.setHighPower(); 
+}

@@ -1,3 +1,4 @@
+#include <RFM69.h>
 #include <LiquidCrystal.h>
 #define DURATACLICKLUNGO 2000000 // tempo pressione pulsante per click lungo = 2 secondi
 #define TBACKOUTPULSANTE 10000 // tempo blackout pulsante dopo un click
@@ -6,6 +7,10 @@
 #define DISCOVERY 1 // discovery: cerca gli slave presenti in rete
 #define INVIASYNC 2 // pre voto. Invia l'ora del master a tutti gli slave svovati con discovery
 #define VOTO 3 // fase di acquisizione dei voti e display risultati
+// parametri radio
+#define NETWORKID 27
+#define FREQUENCY 917000000
+
 
 #define pinPULSANTE 11
 
@@ -77,6 +82,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Setup");
   lcd.begin(16, 2);
+  radioSetup(0);
   stato.setStato(ZERO);
 }
 // algoritmo 1
@@ -164,7 +170,7 @@ bool inviaSync() {
   for(byte i=0;i<numero_slave;i++) {
     retry=0;
     while(true) {
-      if(TrasmettiPacchettoSync(slave[i].indirizzo),micros-t_inizio_voto) break;
+      if(TrasmettiPacchettoSync(slave[i].indirizzo),micros()-t_inizio_voto) break;
       retry++;
       if(retry==3) {
         stato.setStato(0);
@@ -223,9 +229,27 @@ bool interrogaSlave(byte a, byte *r) {
 
 //algoritmo 18
 bool TrasmettiPacchettoSync(byte indirizzo, unsigned long t_da_iniziovoto) {
+	char pkt[5];
+	pkt[0]='s';
+	pkt[1]=t_da_iniziovoto >> 24;
+	pkt[2]=(t_da_iniziovoto >> 16) & 0xFF;
+	pkt[3]=(t_da_iniziovoto >> 8) & 0xFF;
+	pkt[4]=(t_da_iniziovoto) & 0xFF;
+	radio.sendWithRetry(indirizzo, pkt, 5,1,50);
   
 }
 
+void radioSetup(byte indirizzo) {
+	radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
+	radio.writeReg(0x03,0x0D); // 9k6
+	radio.writeReg(0x04,0x05);
+	/*
+	radio.writeReg(0x03,0x00); // 153k6
+	radio.writeReg(0x04,0xD0);
+	*/
+	radio.setFrequency(FREQUENCY);
+	radio.setHighPower(); 
+}
 
 
 
