@@ -1,22 +1,28 @@
 #include <RFM69.h>
 #include <EEPROM.h>
 
-#define pinPULSANTE 11
+#define pinPULSANTE 3
 #define PINBATTERIA 12 // per lettura tensione batteria 
 #define TIMEOUTVOTO 1200000000 // 20 minuti
 // parametri radio
 #define NETWORKID 27
-#define FREQUENCY 917000000
+#define FREQUENCY 868000000
+#define RFM69_CS 10
+#define RFM69_IRQ 2
+#define RFM69_IRQN 0 
+#define RFM69_RST 9
+
 #define MASTER 0
-#define LEDPIN LED_BUILTIN
+
+#define LEDPIN 4
 // stati per elaborazione seriale
 #define COMANDO 0
-#define VALORE 0
+#define VALORE 1
 
 
-unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledciclo, Tledon;
+unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon;
 bool pulsantegiapremuto;
-RFM69 radio;
+RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
 void setup() {
   // put your setup code here, to run once:
@@ -28,7 +34,7 @@ void setup() {
   Serial.println(indirizzo);
   pinMode(LEDPIN, OUTPUT);
   digitalWrite(LEDPIN, LOW);
-  impostaled(3000,300);
+  impostaled(300,2700);
   radioSetup(indirizzo);
   radio.readAllRegs();
 }
@@ -38,7 +44,7 @@ void loop() {
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
   ElaboraRadio();
-  if((micros-TrxSync)>TIMEOUTVOTO) impostaled(3000,300);
+  if((micros()-TrxSync)>TIMEOUTVOTO) impostaled(300,2700);
   LampeggioLED();
 }
 
@@ -49,10 +55,13 @@ void ElaboraRadio() {
   switch(radio.DATA[0]) {
     case 's':
         ElaboraCmdInvioSync(pkt); // cmd s
+        break;
     case 'p':
         ElaboraPoll(); // cmd p
+        break;
     case 'd':
         ElaboraCmdDiscovery(); // cmd d
+        break;
     
         
   }
@@ -64,7 +73,9 @@ void ElaboraPulsante() {
     if (!pulsantegiapremuto) {
       pulsantegiapremuto=true;
       Tvoto=micros()-TrxSync+TdaInizioVoto;
-      impostaled(1000,1000);
+      impostaled(1000,1);
+      Serial.print(F("elabpuls: tvoto="));      
+      Serial.println(Tvoto,DEC);
     }
   }
 }
@@ -79,45 +90,89 @@ void ElaboraCmdInvioSync(byte * pkt) {
   TdaInizioVoto+=radio.DATA[4];
   radio.send(MASTER, "k", 1,false);
   pulsantegiapremuto=false;
-  impostaled(1000,100); //1 Hz Dc=10%
+  impostaled(100,900); //1 Hz Dc=10%
   Tvoto=0;
+  char s[50];
+  sprintf(s,(char *)F("rxsync: trxsync=%u tdainizvo=%u"),TrxSync,TdaInizioVoto);
+  Serial.println(s);
 }
 
 // algoritmo 5
 void ElaboraCmdDiscovery() {
-  char pkt[4];
+  byte pkt[4];
   pkt[0]='e';
   pkt[1]=(analogRead(PINBATTERIA)>>2);
   pkt[2]=radio.RSSI >> 8;
   pkt[3]=radio.RSSI & 0xFF;
   radio.send(MASTER, pkt, 4,false);
+  char s[50];
+  sprintf(s,(char *)F("elabdisc: pkt=[%x][%x][%x][%x]"),pkt[0],pkt[1],pkt[2],pkt[3]);
+  Serial.println(s);
 }
 
 void ElaboraPoll() {
-  char pkt[5];
+  byte pkt[5];
   pkt[0]='q';
   pkt[1]=Tvoto >> 24;
   pkt[2]=(Tvoto >> 16) & 0xFF;
   pkt[3]=(Tvoto >> 8) & 0xFF;
-  pkt[1]=(Tvoto) & 0xFF;
+  pkt[4]=(Tvoto) & 0xFF;
   radio.send(MASTER, pkt, 5,false);
+  char s[50];
+  sprintf(s,(char *)F("elabpoll: pkt=[%x][%x][%x][%x][%x]"),pkt[0],pkt[1],pkt[2],pkt[3],pkt[4]);
+  Serial.println(s);
+
 }
 
 
-//algoritmo 6
+
 void LampeggioLED() {
+  //char s[50];
+  static unsigned long tcambio=0,ison=false;
   unsigned long now=millis();
-  static unsigned long tcambio;
+  unsigned long delta=now-tcambio;
+  
+  if(ison) {
+    if(delta>=Tledon) {
+      ison=false;
+      tcambio=now;
+      digitalWrite(LEDPIN, LOW); 
+      //sprintf(s,"lampegon: now=%u",now);
+      //Serial.println(s);
+    }
+    
+  } else {
+    if(delta>=Tledoff) {
+      ison=true;
+      tcambio=now;
+      digitalWrite(LEDPIN, HIGH); 
+      //sprintf(s,"lampegoff: now=%u",now);
+      //Serial.println(s);
+    }
+    
+  }
+  /*
   if ((now-tcambio) >= Tledciclo) {
-    digitalWrite(LEDPIN, HIGH); 
     tcambio=now;
-  } else
-    if ((now-tcambio) >= Tledon) digitalWrite(LEDPIN, LOW); 
+    //sprintf(s,(char *)F("lampeg: now=%u,tcambio=%u,ciclo=%u,on=%u"),now,tcambio,Tledciclo,Tledon);
+    sprintf(s,"lampegon: now=%u",now);
+    Serial.println(s);
+    digitalWrite(LEDPIN, LOW); 
+  } else {
+    if ((now-tcambio) >= Tledon) {
+      digitalWrite(LEDPIN, HIGH); 
+      sprintf(s,"lampegoff: now=%u",now);
+      Serial.println(s);
+    }
+    */
+    
+
+
 }
 
-void impostaled(int Tciclo, int TOn) {
-  Tledciclo=Tciclo;
-  Tledon=TOn;
+void impostaled(int Ton, int Toff) {
+  Tledon=Ton;
+  Tledoff=Toff;
 }
 
 //algoritmo 7
@@ -125,8 +180,18 @@ void ProcessaDatiSeriali() {
   static byte comando=0,prossimodato=0,k=0,valore[5];
   if(Serial.available()) {
     byte c=Serial.read();
-    if(c=='\n' || c==' ') return;
-    if(c=='\r') {
+  /*
+    Serial.print(F("datiser: char="));
+    Serial.print(c,HEX);
+    Serial.print(F(" cmd="));
+    Serial.print(comando,HEX);
+    Serial.print(F(" prox="));
+    Serial.print(prossimodato,HEX);
+    Serial.print(F(" k="));
+    Serial.println(k,HEX);
+    */
+    if(c==' ') return;
+    if(c=='\n') {
       // elabora il comando
       if(comando=='W') {
         // scrivi indirizzo slave sul byte 0 della eeprom
@@ -136,13 +201,15 @@ void ProcessaDatiSeriali() {
         } else {
           EEPROM.write(0,ind);
           radio.setAddress(ind);
-          Serial.println(F("indirizzo memorizzato"));
+          Serial.print(F("indirizzo memorizzato: "));
+          Serial.println(ind);
         }
       } else {
         Serial.println(F("comando errato"));  
       }
       k=0;
-      prossimodato=COMANDO;     
+      prossimodato=COMANDO;   
+      return;  
 
     }
     if(prossimodato==COMANDO) {
@@ -150,12 +217,15 @@ void ProcessaDatiSeriali() {
       comando=c;
       prossimodato=VALORE;
       k=0;
+      return;
     }
     if(prossimodato==VALORE) {
       valore[k++]=c;
+      valore[k] = 0;
       if(k>3) {
         k=0;
-        prossimodato=COMANDO;     
+        prossimodato=COMANDO;  
+        return;   
       }
     }
     
@@ -165,6 +235,12 @@ void ProcessaDatiSeriali() {
   
 
 void radioSetup(byte indirizzo) {
+  // Hard Reset the RFM module 
+  pinMode(RFM69_RST, OUTPUT); 
+  digitalWrite(RFM69_RST, HIGH); 
+  delay(100);
+  digitalWrite(RFM69_RST, LOW); 
+  delay(100);
 	radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
 	radio.writeReg(0x03,0x0D); // 9k6
 	radio.writeReg(0x04,0x05);
@@ -174,4 +250,5 @@ void radioSetup(byte indirizzo) {
 	*/
 	radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
+  radio.setPowerLevel(31);
 }
