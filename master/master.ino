@@ -16,7 +16,7 @@
 #define RFM69_RST 9
 
 
-#define pinPULSANTE 11
+#define pinPULSANTE 3
 /*
 class Display {
 	public:
@@ -112,14 +112,24 @@ void ProcessaDatiSeriali() {
 //algoritmo 3
 void ElaboraPulsante() {
   static unsigned long inizio_blackout=0, durata_pressione_pulsante=0,inizio_pressione_pulsante=0;
+  static bool first=true;
   unsigned long now=millis();
-  if(digitalRead(pinPULSANTE)) {
-    if((now-inizio_blackout) > TBACKOUTPULSANTE) 
-      if(durata_pressione_pulsante==0) inizio_pressione_pulsante=now; else durata_pressione_pulsante=(now-inizio_pressione_pulsante);
+  if(digitalRead(pinPULSANTE)==0) {
+    Serial.print("puls press: durata=");
+
+    if((now-inizio_blackout) > TBACKOUTPULSANTE) {
+      durata_pressione_pulsante=(now-inizio_pressione_pulsante);
+      if(first) {inizio_pressione_pulsante=now; first=false;} else durata_pressione_pulsante=(now-inizio_pressione_pulsante);
+      Serial.println(durata_pressione_pulsante);
+    }
+    //Serial.print("puls press: durata=");
   } else {
+
     if(durata_pressione_pulsante>0) {
+      Serial.println("puls rel");
       if(durata_pressione_pulsante>DURATACLICKLUNGO) PulsanteClickLungo(); else PulsanteClickCorto();
       durata_pressione_pulsante=0;
+      first=true;
       inizio_blackout=now;
     }
   }
@@ -144,7 +154,7 @@ void Discovery() {
   static byte indirizzo_slave_corrente=0;
   if(indirizzo_slave_corrente==0) numero_slave=0; // cancella la lista
   byte livbatt;
-  short rssi;
+  byte rssi;
   if(interrogaSlaveDiscovery(indirizzo_slave_corrente,&livbatt,&rssi)) {
     slave[numero_slave]=new Slave(indirizzo_slave_corrente);
     slave[numero_slave]->oravoto=0;
@@ -265,8 +275,8 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, short *rssi) {
   while (millis() - sentTime < 20) {
     if(radio.receiveDone()) {
       if(radio.DATA[0]=='e') {
-        livbatt=radio.DATA[1];
-        rssi=radio.DATA[2] << 8 + radio.DATA[3];
+        *livbatt=radio.DATA[1];
+        *rssi=radio.DATA[2];
         return true;
       }
     }

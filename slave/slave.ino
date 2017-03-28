@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 
 #define pinPULSANTE 3
-#define PINBATTERIA 12 // per lettura tensione batteria 
+#define PINBATTERIA 0 // per lettura tensione batteria 
 #define TIMEOUTVOTO 1200000000 // 20 minuti
 // parametri radio
 #define NETWORKID 27
@@ -28,7 +28,7 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(pinPULSANTE, INPUT_PULLUP);
   byte indirizzo = EEPROM.read(0);
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.println(F("Setup"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
@@ -102,13 +102,12 @@ void ElaboraCmdDiscovery() {
   byte pkt[4];
   pkt[0]='e';
   pkt[1]=(analogRead(PINBATTERIA)>>2);
-  pkt[2]=radio.RSSI >> 8;
-  pkt[3]=radio.RSSI & 0xFF;
-  radio.send(MASTER, pkt, 4,false);
-  char s[50];
-  sprintf(s,(char *)F("elabdisc: pkt=[%x][%x][%x][%x]"),pkt[0],pkt[1],pkt[2],pkt[3]);
-  Serial.println(s);
-}
+  pkt[2]=radio.RSSI;
+  radio.send(MASTER, pkt, 3,false);
+  stampapkt(pkt, 3);
+    
+}  
+ 
 
 void ElaboraPoll() {
   byte pkt[5];
@@ -177,10 +176,11 @@ void impostaled(int Ton, int Toff) {
 
 //algoritmo 7
 void ProcessaDatiSeriali() {
-  static byte comando=0,prossimodato=0,k=0,valore[5];
-  if(Serial.available()) {
-    byte c=Serial.read();
-  /*
+  static byte comando=0,prossimodato=0,k=0;
+  static char valore[5];
+  if(Serial.available()>0) {
+    int c=Serial.read();
+    /*
     Serial.print(F("datiser: char="));
     Serial.print(c,HEX);
     Serial.print(F(" cmd="));
@@ -188,7 +188,9 @@ void ProcessaDatiSeriali() {
     Serial.print(F(" prox="));
     Serial.print(prossimodato,HEX);
     Serial.print(F(" k="));
-    Serial.println(k,HEX);
+    Serial.print(k,HEX);
+    Serial.print(F(" valore="));
+    Serial.println(valore);
     */
     if(c==' ') return;
     if(c=='\n') {
@@ -251,4 +253,16 @@ void radioSetup(byte indirizzo) {
 	radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
+}
+
+void stampapkt(byte *pkt,int len) {
+  Serial.print("len:");
+  Serial.print(len);
+  Serial.print("pkt:");
+  for (int i=0;i<len;i++) {
+    Serial.print(pkt[i],HEX);
+    Serial.print(":");
+  }
+  Serial.println();
+    
 }
