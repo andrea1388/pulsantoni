@@ -20,6 +20,7 @@
 // stati per elaborazione seriale
 #define COMANDO 0
 #define VALORE 1
+unsigned long tiniziovoto;
 void stampapkt(byte *pkt,int len);
 
 unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon;
@@ -133,6 +134,14 @@ void ProcessaDatiSeriali() {
           Discovery();
           // invia discovery a 1
           break;
+        case 'S':
+          Sync();
+          // invia discovery a 1
+          break;
+        case 'P':
+          Voto();
+          // invia discovery a 1
+          break;
       }
       k=0;
       prossimodato=COMANDO;   
@@ -180,12 +189,20 @@ void radioSetup(byte indirizzo) {
   radio.setPowerLevel(31);
 }
 
+void Sync() {
+  tiniziovoto=micros();
+  Serial.print("Sync micros:");
+  Serial.println(tiniziovoto);
+  if(TrasmettiPacchettoSync(1, tiniziovoto)) {
+    Serial.print("ok");
+  } else Serial.print("nooo!");
+  
+}
+
 void Discovery() {
   byte livbatt;
   byte rssi;
   Serial.println("discovery");
-    Serial.print("millis:");
-  Serial.println(millis());
 
   digitalWrite(LEDPIN, LOW); 
   if(interrogaSlaveDiscovery(1,&livbatt,&rssi)) {
@@ -209,13 +226,15 @@ void Discovery() {
 void Voto() {
   unsigned long oravoto;
     Serial.println("Voto");
-    Serial.print("millis:");
-  Serial.println(millis());
+    Serial.print("micros:");
+  Serial.println(micros());
   digitalWrite(LEDPIN, LOW); 
 
   if(interrogaSlaveVoto(1,&oravoto)) {
     Serial.print("oravoto: ");
-    Serial.println(oravoto,HEX);
+    Serial.print(oravoto-tiniziovoto,DEC);
+    Serial.print(" ");
+    Serial.println((oravoto-tiniziovoto)/1000,DEC);
     digitalWrite(LEDPIN, HIGH); 
     delay(100);
     digitalWrite(LEDPIN, LOW); 
@@ -247,6 +266,7 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssi) {
 }
 
 bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
+  unsigned long t;
   byte pkt[1];
   pkt[0]='p';
   radio.send(indirizzo,pkt,1,false);
@@ -256,9 +276,15 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
       stampapkt(radio.DATA,radio.PAYLOADLEN);
       if(radio.DATA[0]=='q') {
         *oravoto=0;
-        *oravoto=(radio.DATA[1] << 24);
-        *oravoto+= (radio.DATA[2] << 16);
-        *oravoto+= (radio.DATA[3] << 8);
+        t=radio.DATA[1];
+        t=t<<24;
+        *oravoto=t;
+        t=radio.DATA[2];
+        t=t<<16;
+        *oravoto+=t;
+        t=radio.DATA[3];
+        t=t<<8;
+        *oravoto+=t;
         *oravoto+= radio.DATA[4];
         return true;
       }
@@ -266,6 +292,28 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
   }
   return false;
 }
+
+bool TrasmettiPacchettoSync(byte indirizzo, unsigned long t_da_iniziovoto) {
+  char pkt[5];
+  pkt[0]='s';
+  pkt[1]=t_da_iniziovoto >> 24;
+  pkt[2]=(t_da_iniziovoto >> 16) & 0xFF;
+  pkt[3]=(t_da_iniziovoto >> 8) & 0xFF;
+  pkt[4]=(t_da_iniziovoto) & 0xFF;
+  stampapkt(pkt,5);
+  radio.send(indirizzo, pkt, 5);
+  unsigned long sentTime = millis();
+  while (millis() - sentTime < 20) {
+    if(radio.receiveDone()) {
+      stampapkt(radio.DATA,radio.PAYLOADLEN);
+      if(radio.DATA[0]=='k') {
+        return true;
+      }
+    }
+  }
+  return false;  
+}
+
 
 void stampapkt(byte *pkt,int len) {
   Serial.print("millis:");

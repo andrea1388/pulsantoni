@@ -50,11 +50,10 @@ void loop() {
 
 // algoritmo 2
 void ElaboraRadio() {
-  byte pkt[7];
   if(!radio.receiveDone()) return;
   switch(radio.DATA[0]) {
     case 's':
-        ElaboraCmdInvioSync(pkt); // cmd s
+        ElaboraCmdInvioSync(radio.DATA); // cmd s
         break;
     case 'p':
         ElaboraPoll(); // cmd p
@@ -82,19 +81,28 @@ void ElaboraPulsante() {
 
 // algoritmo 4
 void ElaboraCmdInvioSync(byte * pkt) {
+  unsigned long t;
   TrxSync=micros();
+  stampapkt(pkt, 5);
   // estrae l'informazione dal pacchetto
-  TdaInizioVoto=radio.DATA[1] << 24;
-  TdaInizioVoto+=(radio.DATA[2] << 16);
-  TdaInizioVoto+=(radio.DATA[3] << 8);
+  t=radio.DATA[1];
+  t=t<<24;
+  TdaInizioVoto=t;
+  t=radio.DATA[2];
+  t=t<<16;
+  TdaInizioVoto+=t;
+  t=radio.DATA[3];
+  t=t<<8;
+  TdaInizioVoto+=t;
   TdaInizioVoto+=radio.DATA[4];
   radio.send(MASTER, "k", 1,false);
   pulsantegiapremuto=false;
   impostaled(100,900); //1 Hz Dc=10%
   Tvoto=0;
-  char s[50];
-  sprintf(s,(char *)F("rxsync: trxsync=%u tdainizvo=%u"),TrxSync,TdaInizioVoto);
-  Serial.println(s);
+  Serial.print("rxsync: trxsync=");
+  Serial.print(TrxSync);
+  Serial.print(" tdainiziov=");
+  Serial.println(TdaInizioVoto);
 }
 
 // algoritmo 5
@@ -117,10 +125,8 @@ void ElaboraPoll() {
   pkt[3]=(Tvoto >> 8) & 0xFF;
   pkt[4]=(Tvoto) & 0xFF;
   radio.send(MASTER, pkt, 5,false);
-  char s[50];
-  sprintf(s,(char *)F("elabpoll: pkt=[%x][%x][%x][%x][%x]"),pkt[0],pkt[1],pkt[2],pkt[3],pkt[4]);
-  Serial.println(s);
-
+  Serial.print("elabpoll:");
+  stampapkt(pkt, 3);
 }
 
 
