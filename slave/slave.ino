@@ -28,7 +28,7 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(pinPULSANTE, INPUT_PULLUP);
   byte indirizzo = EEPROM.read(0);
-  Serial.begin(9600);
+  Serial.begin(250000);
   Serial.println(F("Setup"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
@@ -36,7 +36,7 @@ void setup() {
   digitalWrite(LEDPIN, LOW);
   impostaled(300,2700);
   radioSetup(indirizzo);
-  radio.readAllRegs();
+  //radio.readAllRegs();
 }
 
 // algoritmo 1
@@ -112,7 +112,7 @@ void ElaboraCmdDiscovery() {
   pkt[1]=(analogRead(PINBATTERIA)>>2);
   pkt[2]=radio.RSSI;
   radio.send(MASTER, pkt, 3,false);
-  stampapkt(pkt, 3);
+  //stampapkt(pkt, 3);
     
 }  
  
@@ -125,8 +125,8 @@ void ElaboraPoll() {
   pkt[3]=(Tvoto >> 8) & 0xFF;
   pkt[4]=(Tvoto) & 0xFF;
   radio.send(MASTER, pkt, 5,false);
-  Serial.print("elabpoll:");
-  stampapkt(pkt, 3);
+  //Serial.print("elabpoll:");
+  //stampapkt(pkt, 3);
 }
 
 

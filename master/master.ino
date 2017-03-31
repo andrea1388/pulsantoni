@@ -115,7 +115,7 @@ unsigned long t_inizio_voto;
 
 void setup() {
   pinMode(pinPULSANTE, INPUT_PULLUP);
-  Serial.begin(9600);
+  Serial.begin(250000);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -326,6 +326,7 @@ bool inviaSync() {
       }
     }
   }
+  delay(30);
   return true;
 }
 
