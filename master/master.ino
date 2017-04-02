@@ -40,6 +40,7 @@ byte numero_slave;
 class Slave {
   public:
     unsigned long oravoto;
+    byte fallimenti;
     //byte tensionebatteria;
     //byte rssi;
     //bool funzionante;
@@ -277,6 +278,7 @@ void Discovery() {
   if(interrogaSlaveDiscovery(indirizzo_slave_discovery,&livbatt,&rssi)) {
     slave[numero_slave]=new Slave(indirizzo_slave_discovery);
     slave[numero_slave]->oravoto=0;
+    slave[numero_slave]->fallimenti=0;
     //slave[numero_slave]->tensionebatteria=livbatt;
     //slave[numero_slave]->rssi=rssi;
     //slave[numero_slave]->funzionante=true;
@@ -302,10 +304,6 @@ void Voto() {
   }
   else {
     interrogaTuttiGliSlave();
-    if(numero_votati>0) {
-      MostraRisultatiVoto();
-    }
-    
   }
 }
 
@@ -359,9 +357,9 @@ void interrogaTuttiGliSlave() {
   for(byte i=0;i<numero_slave;i++) {
     if(slave[i]->oravoto==0) {
       if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto)) {
+        slave[i]->fallimenti=0;
         if(oravoto>0) {
           slave[i]->oravoto=oravoto;
-          //slave[i]->funzionante=true;
           numero_votati++;
           Serial.print("v ");
           Serial.print(slave[i]->indirizzo);
@@ -381,16 +379,18 @@ void interrogaTuttiGliSlave() {
             }
           }
           // aggiorna display
+          MostraRisultatiVoto();
         }
   
       } else {
-        //slave[i]->funzionante=false;
-        Serial.print(F("e Pulsante non risponde: "));
-        Serial.println(slave[i]->indirizzo);
+        slave[i]->fallimenti++;
+        if(slave[i]->fallimenti>3) {
+          Serial.print(F("e Pulsante non risponde: "));
+          Serial.println(slave[i]->indirizzo);
+        }
       }
     }
   }
-  delay(50);
 }
 
 //algoritmo 15
@@ -422,7 +422,7 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
   pkt[0]='p';
   radio.send(indirizzo,pkt,1,false);
   unsigned long sentTime = millis();
-  while (millis() - sentTime < 20) {
+  while (millis() - sentTime < 10) {
     if(radio.receiveDone()) {
       //stampapkt(radio.DATA,radio.PAYLOADLEN);
       if(radio.DATA[0]=='q') {
@@ -472,12 +472,13 @@ void radioSetup(byte indirizzo) {
   digitalWrite(RFM69_RST, LOW); 
   delay(100);
   radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
+  /*
   radio.writeReg(0x03,0x0D); // 9k6
   radio.writeReg(0x04,0x05);
-  /*
+  */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  */
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening
   radio.setFrequency(FREQUENCY);
   radio.setHighPower(); 
   radio.setPowerLevel(31);

@@ -34,9 +34,9 @@ void setup() {
   Serial.println(indirizzo);
   pinMode(LEDPIN, OUTPUT);
   digitalWrite(LEDPIN, LOW);
-  impostaled(300,2700);
+  impostaled(100,2900);
   radioSetup(indirizzo);
-  //radio.readAllRegs();
+  radio.readAllRegs();
 }
 
 // algoritmo 1
@@ -44,7 +44,7 @@ void loop() {
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
   ElaboraRadio();
-  if((micros()-TrxSync)>TIMEOUTVOTO) impostaled(300,2700);
+  if((micros()-TrxSync)>TIMEOUTVOTO) impostaled(100,2900);
   LampeggioLED();
 }
 
@@ -97,7 +97,7 @@ void ElaboraCmdInvioSync(byte * pkt) {
   TdaInizioVoto+=radio.DATA[4];
   radio.send(MASTER, "k", 1,false);
   pulsantegiapremuto=false;
-  impostaled(100,900); //1 Hz Dc=10%
+  impostaled(500,500); //1 Hz Dc=50%
   Tvoto=0;
   Serial.print("rxsync: trxsync=");
   Serial.print(TrxSync);
@@ -112,6 +112,7 @@ void ElaboraCmdDiscovery() {
   pkt[1]=(analogRead(PINBATTERIA)>>2);
   pkt[2]=radio.RSSI;
   radio.send(MASTER, pkt, 3,false);
+  impostaled(30,70);
   //stampapkt(pkt, 3);
     
 }  
@@ -125,6 +126,7 @@ void ElaboraPoll() {
   pkt[3]=(Tvoto >> 8) & 0xFF;
   pkt[4]=(Tvoto) & 0xFF;
   radio.send(MASTER, pkt, 5,false);
+  //delay(1);
   //Serial.print("elabpoll:");
   //stampapkt(pkt, 3);
 }
@@ -250,13 +252,14 @@ void radioSetup(byte indirizzo) {
   digitalWrite(RFM69_RST, LOW); 
   delay(100);
 	radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
-	radio.writeReg(0x03,0x0D); // 9k6
-	radio.writeReg(0x04,0x05);
-	/*
-	radio.writeReg(0x03,0x00); // 153k6
-	radio.writeReg(0x04,0xD0);
-	*/
-	radio.setFrequency(FREQUENCY);
+ /*
+  radio.writeReg(0x03,0x0D); // 9k6
+  radio.writeReg(0x04,0x05);
+  */
+  radio.writeReg(0x03,0x00); // 153k6
+  radio.writeReg(0x04,0xD0);
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening
+  radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
 }
