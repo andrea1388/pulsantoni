@@ -12,10 +12,10 @@ namespace pulsantoni
     //delegate void SetTextCallback(string text);
     delegate void SetTextCallback(string text,TextBox t);
     delegate void SetTextCallback2(string text, ListBox t);
+    delegate void SetTextCallback3(ListViewItem i, ListView l);
     public partial class Form1 : Form
     
     {
-        String txt;
         public Form1()
         {
             InitializeComponent();
@@ -27,6 +27,12 @@ namespace pulsantoni
             Program.master.EventoNuovoMessaggio += Messaggio;
             Program.master.EventoNuovoClient += NuovoClient;
             Program.master.EventoVotoAcquisito += Voto;
+            Program.master.EventoDiscFail += DiscFail;
+            lv1.Columns.Add("Indirizzo", -2, HorizontalAlignment.Center );
+            lv1.Columns.Add("V Batt.", -2, HorizontalAlignment.Center );
+            lv1.Columns.Add("Slave Sign.", -2, HorizontalAlignment.Center);
+            lv1.Columns.Add("Master Sign.", -2, HorizontalAlignment.Center);
+
 
         }
         ~Form1()
@@ -35,7 +41,19 @@ namespace pulsantoni
         }
         void NuovoClient(object sender, DiscoveryEventArgs e)
         {
-            String s = e.indirizzo + " " + e.batteria + " " + e.rssi;
+            String s = e.indirizzo + " " + e.batteria + " " + e.rssislave + " " + e.rssimaster;
+            AddItem(s, listBox1);
+            ListViewItem i = new ListViewItem(e.indirizzo.ToString());
+            i.SubItems.Add(e.batteria.ToString());
+            i.SubItems.Add(e.rssislave .ToString());
+            i.SubItems.Add(e.rssimaster.ToString());
+            AddLvItem(i, lv1);
+
+            //SetText("Pronto", TBStato);
+        }
+        void DiscFail(object sender, DiscFailEventArgs e)
+        {
+            String s = e.indirizzo.ToString()+ " ko";
             AddItem(s, listBox1);
             //SetText("Pronto", TBStato);
         }
@@ -112,6 +130,18 @@ namespace pulsantoni
             else
             {
                 lb.Items.Clear();
+            }
+        }
+        private void AddLvItem(ListViewItem i, ListView l)
+        {
+            if (l.InvokeRequired)
+            {
+                SetTextCallback3 d = new SetTextCallback3(AddLvItem);
+                this.Invoke(d, new object[] { i, l });
+            }
+            else
+            {
+                l.Items.Add(i);
             }
         }
         private void Form1_Load(object sender, EventArgs e)

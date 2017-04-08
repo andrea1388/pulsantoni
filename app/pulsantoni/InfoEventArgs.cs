@@ -8,7 +8,8 @@ public class DiscoveryEventArgs : EventArgs
 {
     public int indirizzo { get; set; }
     public int batteria { get; set; }
-    public int rssi { get; set; }
+    public int rssislave { get; set; }
+    public int rssimaster { get; set; }
 
 }
 
@@ -16,6 +17,11 @@ public class VotoEventArgs : EventArgs
 {
     public int indirizzo { get; set; }
     public uint oravoto { get; set; }
+}
+
+public class DiscFailEventArgs : EventArgs
+{
+    public int indirizzo { get; set; }
 }
 
 public class NumSlaveEventArgs : EventArgs

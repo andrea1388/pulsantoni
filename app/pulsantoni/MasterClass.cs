@@ -13,6 +13,7 @@ public class MasterClass
     public event EventHandler EventoInizioPoll;
     public event EventHandler<MsgEventArgs> EventoNuovoMessaggio;
     public event EventHandler<NumSlaveEventArgs> EventoRxNumMaxSlave;
+    public event EventHandler<DiscFailEventArgs> EventoDiscFail;
     public String portname;
     public int BaudRate;
     Thread rdr;
@@ -110,6 +111,11 @@ public class MasterClass
                                 nse.numslave = int.Parse (sottocomandi[1]);
                                 if (EventoRxNumMaxSlave != null) EventoRxNumMaxSlave(this, nse);
                                 break;
+                            case "dx": // max numero slave
+                                DiscFailEventArgs dfe = new DiscFailEventArgs();
+                                dfe.indirizzo  = int.Parse(sottocomandi[1]);
+                                if (EventoDiscFail != null) EventoDiscFail(this, dfe);
+                                break;
                             default:
                                 cmderr(comandoricevuto);
                                 break;
@@ -129,14 +135,15 @@ public class MasterClass
                                 break;
                         }
                         break;
-                    case 4:
+                    case 5:
                         switch (sottocomandi[0])
                         {
                             case "d": // trovato nuovo client
                                 DiscoveryEventArgs dea = new DiscoveryEventArgs();
                                 dea.indirizzo = int.Parse(sottocomandi[1]);
                                 dea.batteria  = int.Parse(sottocomandi[2]);
-                                dea.rssi = int.Parse(sottocomandi[3]);
+                                dea.rssislave = int.Parse(sottocomandi[3]);
+                                dea.rssimaster = int.Parse(sottocomandi[4]);
                                 if (EventoNuovoClient != null) EventoNuovoClient(this, dea);
                                 break;
                             default:

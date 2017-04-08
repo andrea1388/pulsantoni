@@ -39,6 +39,7 @@
             this.TBMsg = new System.Windows.Forms.TextBox();
             this.TBStato = new System.Windows.Forms.TextBox();
             this.listBox1 = new System.Windows.Forms.ListBox();
+            this.lv1 = new System.Windows.Forms.ListView();
             this.SuspendLayout();
             // 
             // tbPorta
@@ -117,11 +118,23 @@
             this.listBox1.Size = new System.Drawing.Size(249, 199);
             this.listBox1.TabIndex = 9;
             // 
+            // lv1
+            // 
+            this.lv1.BackColor = System.Drawing.Color.White;
+            this.lv1.Location = new System.Drawing.Point(267, 116);
+            this.lv1.MultiSelect = false;
+            this.lv1.Name = "lv1";
+            this.lv1.Size = new System.Drawing.Size(327, 147);
+            this.lv1.TabIndex = 10;
+            this.lv1.UseCompatibleStateImageBehavior = false;
+            this.lv1.View = System.Windows.Forms.View.Details;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(656, 307);
+            this.Controls.Add(this.lv1);
             this.Controls.Add(this.listBox1);
             this.Controls.Add(this.TBStato);
             this.Controls.Add(this.TBMsg);
@@ -152,6 +165,7 @@
         private System.Windows.Forms.TextBox TBMsg;
         private System.Windows.Forms.TextBox TBStato;
         private System.Windows.Forms.ListBox listBox1;
+        private System.Windows.Forms.ListView lv1;
     }
 }
 
