@@ -37,6 +37,7 @@ void setup() {
   impostaled(100,2900);
   radioSetup(indirizzo);
   radio.readAllRegs();
+  TrxSync=0;
 }
 
 // algoritmo 1
@@ -44,7 +45,12 @@ void loop() {
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
   ElaboraRadio();
-  if((micros()-TrxSync)>TIMEOUTVOTO) impostaled(100,2900);
+  if(TrxSync!=0) {
+    if((micros()-TrxSync)>TIMEOUTVOTO) {
+      TrxSync=0;
+      impostaled(100,2900);
+    }
+  }
   LampeggioLED();
 }
 
@@ -68,13 +74,15 @@ void ElaboraRadio() {
 
 // algoritmo 3
 void ElaboraPulsante() {
-  if(digitalRead(pinPULSANTE)==LOW) {
-    if (!pulsantegiapremuto) {
-      pulsantegiapremuto=true;
-      Tvoto=micros()-TrxSync+TdaInizioVoto;
-      impostaled(1000,1);
-      Serial.print(F("elabpuls: tvoto="));      
-      Serial.println(Tvoto,DEC);
+  if(TrxSync!=0) {
+    if(digitalRead(pinPULSANTE)==LOW) {
+      if (!pulsantegiapremuto) {
+        pulsantegiapremuto=true;
+        Tvoto=micros()-TrxSync+TdaInizioVoto;
+        impostaled(1000,1);
+        Serial.print(F("elabpuls: tvoto="));      
+        Serial.println(Tvoto,DEC);
+      }
     }
   }
 }
@@ -83,7 +91,7 @@ void ElaboraPulsante() {
 void ElaboraCmdInvioSync(byte * pkt) {
   unsigned long t;
   TrxSync=micros();
-  stampapkt(pkt, 5);
+  //stampapkt(pkt, 5);
   // estrae l'informazione dal pacchetto
   t=radio.DATA[1];
   t=t<<24;

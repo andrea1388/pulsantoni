@@ -116,7 +116,7 @@ unsigned long t_inizio_voto;
 
 void setup() {
   pinMode(pinPULSANTE, INPUT_PULLUP);
-  Serial.begin(250000);
+  Serial.begin(9600);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -181,7 +181,7 @@ void ProcessaDatiSeriali() {
         case 'S':
           // scrivi indirizzo numero max slave sul byte 1 della eeprom
           nums=atoi(valore);
-          if(nums<1 || nums>255) {
+          if(nums<1 || nums>254) {
             Serial.println(F("e parametro errato"));  
           } else {
             EEPROM.write(1,nums);
@@ -274,8 +274,9 @@ void Discovery() {
   Serial.println(numero_slave);
   */
   byte livbatt;
-  byte rssi;
-  if(interrogaSlaveDiscovery(indirizzo_slave_discovery,&livbatt,&rssi)) {
+  byte rssislave;
+  byte rssimaster;
+  if(interrogaSlaveDiscovery(indirizzo_slave_discovery,&livbatt,&rssislave,&rssimaster)) {
     slave[numero_slave]=new Slave(indirizzo_slave_discovery);
     slave[numero_slave]->oravoto=0;
     slave[numero_slave]->fallimenti=0;
@@ -291,7 +292,12 @@ void Discovery() {
     Serial.print(" ");
     Serial.print(livbatt);
     Serial.print(" ");
-    Serial.println(rssi);
+    Serial.print(rssislave);
+    Serial.print(" ");
+    Serial.println(rssimaster);
+  } else {
+    Serial.print("dx ");
+    Serial.println(indirizzo_slave_discovery);
   }
   if(indirizzo_slave_discovery==numero_max_slave) stato.setStato(ZERO);
   indirizzo_slave_discovery++;
@@ -318,7 +324,7 @@ bool inviaSync() {
       retry++;
       if(retry==3) {
         stato.setStato(0);
-        Serial.print(F("e Slave non funzionante:"));
+        Serial.print(F("e Slave non funzionante: "));
         Serial.println(slave[i]->indirizzo);
 	      return false;
       }
@@ -394,7 +400,7 @@ void interrogaTuttiGliSlave() {
 }
 
 //algoritmo 15
-bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssi) {
+bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byte *rssimaster) {
   byte pkt[1];
   pkt[0]='d';
   for(int i=0;i<3;i++) {
@@ -407,7 +413,8 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssi) {
         //stampapkt(radio.DATA,radio.PAYLOADLEN);
         if(radio.DATA[0]=='e') {
           *livbatt=radio.DATA[1];
-          *rssi=radio.DATA[2];
+          *rssislave=radio.DATA[2];
+          *rssimaster=radio.RSSI;
           return true;
         }
       }
@@ -490,6 +497,7 @@ void radioSetup(byte indirizzo) {
 //algoritmo 11
 // chiamato ad ogni giro di poll
 void MostraRisultatiVoto() {
+  /*
   Serial.print("e best: ");
   for(int f=0;f<5;f++) {
     if(best[f]!=0) {
@@ -500,7 +508,7 @@ void MostraRisultatiVoto() {
     }
   }
   Serial.println("");
-
+  */
   
 }
 
