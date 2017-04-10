@@ -40,6 +40,7 @@
             this.TBStato = new System.Windows.Forms.TextBox();
             this.listBox1 = new System.Windows.Forms.ListBox();
             this.lv1 = new System.Windows.Forms.ListView();
+            this.BIniziaVoto = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // tbPorta
@@ -63,9 +64,9 @@
             // 
             this.button2.Location = new System.Drawing.Point(186, 270);
             this.button2.Name = "button2";
-            this.button2.Size = new System.Drawing.Size(75, 23);
+            this.button2.Size = new System.Drawing.Size(137, 23);
             this.button2.TabIndex = 4;
-            this.button2.Text = "&Send";
+            this.button2.Text = "&Inizia Discovery";
             this.button2.UseVisualStyleBackColor = true;
             this.button2.Click += new System.EventHandler(this.button2_Click);
             // 
@@ -129,11 +130,22 @@
             this.lv1.UseCompatibleStateImageBehavior = false;
             this.lv1.View = System.Windows.Forms.View.Details;
             // 
+            // BIniziaVoto
+            // 
+            this.BIniziaVoto.Location = new System.Drawing.Point(394, 270);
+            this.BIniziaVoto.Name = "BIniziaVoto";
+            this.BIniziaVoto.Size = new System.Drawing.Size(137, 23);
+            this.BIniziaVoto.TabIndex = 11;
+            this.BIniziaVoto.Text = "&Inizia Voto";
+            this.BIniziaVoto.UseVisualStyleBackColor = true;
+            this.BIniziaVoto.Click += new System.EventHandler(this.BIniziaVoto_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(656, 307);
+            this.Controls.Add(this.BIniziaVoto);
             this.Controls.Add(this.lv1);
             this.Controls.Add(this.listBox1);
             this.Controls.Add(this.TBStato);
@@ -166,6 +178,7 @@
         private System.Windows.Forms.TextBox TBStato;
         private System.Windows.Forms.ListBox listBox1;
         private System.Windows.Forms.ListView lv1;
+        private System.Windows.Forms.Button BIniziaVoto;
     }
 }
 

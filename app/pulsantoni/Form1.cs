@@ -13,9 +13,12 @@ namespace pulsantoni
     delegate void SetTextCallback(string text,TextBox t);
     delegate void SetTextCallback2(string text, ListBox t);
     delegate void SetTextCallback3(ListViewItem i, ListView l);
+    delegate void SetTextCallback4();
     public partial class Form1 : Form
     
     {
+        int stato;
+        FVoto fv;
         public Form1()
         {
             InitializeComponent();
@@ -32,6 +35,8 @@ namespace pulsantoni
             lv1.Columns.Add("V Batt.", -2, HorizontalAlignment.Center );
             lv1.Columns.Add("Slave Sign.", -2, HorizontalAlignment.Center);
             lv1.Columns.Add("Master Sign.", -2, HorizontalAlignment.Center);
+            fv = new FVoto();
+            fv.Owner = this;
 
 
         }
@@ -60,12 +65,19 @@ namespace pulsantoni
         void Voto(object sender, VotoEventArgs e)
         {
             String s = e.indirizzo  + " " + e.oravoto;
+            float ov = (float)e.oravoto / (float)1000000;
+            String ovs=ov.ToString("#.###");
+
             AddItem(s, listBox1);
-            //SetText("Pronto", TBStato);
-        }
+            ListViewItem i = new ListViewItem(e.indirizzo.ToString());
+            i.SubItems.Add(ovs);
+            this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Add(i); });
+                //SetText("Pronto", TBStato);
+            }
         void RaggiuntoStato0(object sender, EventArgs e)
         {
             SetText("Pronto", TBStato );
+            this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Voto conluso"; });
         }
         void InviaSync(object sender, EventArgs e)
         {
@@ -73,6 +85,11 @@ namespace pulsantoni
         }
         void InizioVoto(object sender, EventArgs e)
         {
+            //ShowFormVoto();
+            this.Invoke((MethodInvoker)delegate { fv.Show(); });
+            this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Voto in corso"; });
+            this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Clear(); });
+
             DelItem("", listBox1);
             SetText("InizioVoto", TBStato);
         }
@@ -94,8 +111,19 @@ namespace pulsantoni
             //SetMsgText(e.msg );
 
         }
-        
-   
+
+        private void ShowFormVoto()
+        {
+            if (fv.InvokeRequired)
+            {
+                SetTextCallback4 d = new SetTextCallback4(ShowFormVoto);
+                this.Invoke(d, new object[] {  });
+            }
+            else
+            {
+                fv.Show();
+            }
+        }
         private void SetText(string text, TextBox tb)
         {
             if (tb.InvokeRequired)
@@ -155,6 +183,7 @@ namespace pulsantoni
 
         private void button2_Click(object sender, EventArgs e)
         {
+            //if (Program.master.Stato="s0")
             Program.master.StartDiscovery();
         }
 
@@ -162,6 +191,11 @@ namespace pulsantoni
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             Program.master.Close();
+        }
+
+        private void BIniziaVoto_Click(object sender, EventArgs e)
+        {
+            Program.master.StartVoto();
         }
     }
 }

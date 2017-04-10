@@ -18,9 +18,10 @@ public class MasterClass
     public int BaudRate;
     Thread rdr;
 	bool mustexit;
-    String stato;
+    private String stato;
+    public String Stato { get { return stato; }  }
 
-	public MasterClass()
+    public MasterClass()
 	{
 		com = new SerialPort();
 		//com.ReadTimeout = 50;
@@ -55,6 +56,18 @@ public class MasterClass
     public void StartDiscovery()
     {
         com.WriteLine("y");
+    }
+    public void StopDiscovery()
+    {
+        com.WriteLine("x");
+    }
+    public void StartVoto()
+    {
+        com.WriteLine("z");
+    }
+    public void StopVoto()
+    {
+        com.WriteLine("q");
     }
     /*
 	protected virtual void OnThresholdReached(EventArgs e)
@@ -164,7 +177,7 @@ public class MasterClass
 			catch (InvalidOperationException ee)
 			{
                 cmderr(ee.Message);
-				return;
+				//return;
 			}
             catch(System.IO.IOException ioe)
             {
