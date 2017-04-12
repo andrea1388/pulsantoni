@@ -7,7 +7,7 @@ public class MsgEventArgs : EventArgs
 public class DiscoveryEventArgs : EventArgs
 {
     public int indirizzo { get; set; }
-    public int batteria { get; set; }
+    public float batteria { get; set; }
     public int rssislave { get; set; }
     public int rssimaster { get; set; }
 

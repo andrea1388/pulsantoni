@@ -17,7 +17,6 @@ namespace pulsantoni
     public partial class Form1 : Form
     
     {
-        int stato;
         FVoto fv;
         public Form1()
         {
@@ -31,16 +30,22 @@ namespace pulsantoni
             Program.master.EventoNuovoClient += NuovoClient;
             Program.master.EventoVotoAcquisito += Voto;
             Program.master.EventoDiscFail += DiscFail;
-            lv1.Columns.Add("Indirizzo", -2, HorizontalAlignment.Center );
+            lv1.Columns.Add("Device number", -2, HorizontalAlignment.Center );
             lv1.Columns.Add("V Batt.", -2, HorizontalAlignment.Center );
             lv1.Columns.Add("Slave Sign.", -2, HorizontalAlignment.Center);
             lv1.Columns.Add("Master Sign.", -2, HorizontalAlignment.Center);
             lv1.View = View.Details;
             ImageList imageListSmall = new ImageList();
-            imageListSmall.Images.Add(Image.FromFile("antennarossa.jpg"));
-            imageListSmall.Images.Add(Image.FromFile("antennablu.jpg"));
+            ImageList imageListStatus = new ImageList();
+            //imageListSmall.Images.Add(Image.FromFile("antennarossa.jpg"));
+            imageListSmall.Images.Add(pulsantoni.Properties.Resources.IconOk );
+            imageListSmall.Images.Add(pulsantoni.Properties.Resources.IconAntKo );
+            imageListStatus.Images.Add(pulsantoni.Properties.Resources.IconBatt );
+            //imageListSmall.Images.Add(Image.FromFile("antennablu.jpg"));
             lv1.SmallImageList = imageListSmall;
-            lv2.Columns.Add("Indirizzo", -2, HorizontalAlignment.Center);
+            lv1.StateImageList = imageListStatus;
+            lv1.CheckBoxes = true;
+            lv2.Columns.Add("Device number", -2, HorizontalAlignment.Center);
             lv2.View = View.Details;
             fv = new FVoto();
             fv.Owner = this;
@@ -53,12 +58,14 @@ namespace pulsantoni
         }
         void NuovoClient(object sender, DiscoveryEventArgs e)
         {
+            String ovs = e.batteria .ToString("#.#");
             ListViewItem i = new ListViewItem(e.indirizzo.ToString());
-            i.SubItems.Add(e.batteria.ToString());
+            i.SubItems.Add(ovs);
             i.SubItems.Add(e.rssislave .ToString());
             i.SubItems.Add(e.rssimaster.ToString());
-            i.ImageIndex = 1;
-            if (e.rssislave <= 225) i.ImageIndex = 0;
+            i.ImageIndex = 0;
+            if (e.batteria < 3.0) i.Checked = false; else i.Checked = true;
+            if (e.rssislave <= 200) i.ImageIndex = 1;
             this.Invoke((MethodInvoker)delegate { lv1.Items.Add(i); });
 
             //AddLvItem(i, lv1);
@@ -70,34 +77,33 @@ namespace pulsantoni
         }
         void Voto(object sender, VotoEventArgs e)
         {
-            String s = e.indirizzo  + " " + e.oravoto;
             float ov = (float)e.oravoto / (float)1000000;
             String ovs=ov.ToString("#.###");
-            ListViewItem i = new ListViewItem(e.indirizzo.ToString());
+            ListViewItem i = new ListViewItem(" ");
+            i.SubItems.Add(e.indirizzo.ToString());
             i.SubItems.Add(ovs);
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Add(i); });
-                //SetText("Pronto", TBStato);
         }
         void RaggiuntoStato0(object sender, EventArgs e)
         {
-            SetText("Pronto", TBStato );
-            this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Voto conluso"; });
+            SetText("Ready", TBStato );
+            this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Poll ended"; });
         }
         void InviaSync(object sender, EventArgs e)
         {
-            SetText("InviaSync", TBStato);
+            SetText("Synching", TBStato);
         }
         void InizioVoto(object sender, EventArgs e)
         {
             //ShowFormVoto();
             this.Invoke((MethodInvoker)delegate { fv.Show(); });
-            this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Voto in corso"; });
+            this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Poll started"; });
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Clear(); });
-            SetText("InizioVoto", TBStato);
+            SetText("Poll started", TBStato);
         }
         void IniziatoDiscovery(object sender, EventArgs e)
         {
-            SetText("Discovery", TBStato);
+            SetText("Discovery started", TBStato);
             this.Invoke((MethodInvoker)delegate { lv1.Items.Clear(); });
             this.Invoke((MethodInvoker)delegate { lv2.Items.Clear(); });
         }
@@ -183,7 +189,7 @@ namespace pulsantoni
             }
             tbPorta.Text = Program.master.portname;
             tbPorta.Text = Program.master.BaudRate.ToString();
-
+            Program.master.GetMAxSlave();
         }
 
 
@@ -216,6 +222,24 @@ namespace pulsantoni
         private void blista_Click(object sender, EventArgs e)
         {
             lv1.View = System.Windows.Forms.View.Details;
+        }
+
+        private void bcambianumslave_Click(object sender, EventArgs e)
+        {
+            string input = TBNumMaxSlave.Text;
+            int n;
+            if(int.TryParse(input,out n))
+            {
+                if (n > 1 && n < 255)
+                    Program.master.SetMAxSlave(n);
+                else MessageBox.Show("Error");
+            }
+
+        }
+
+        private void bdiscstop_Click(object sender, EventArgs e)
+        {
+            Program.master.StopDiscovery();
         }
     }
 }

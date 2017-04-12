@@ -69,6 +69,14 @@ public class MasterClass
     {
         com.WriteLine("q");
     }
+    public void SetMAxSlave(int max)
+    {
+        com.WriteLine("s "+max.ToString());
+    }
+    public void GetMAxSlave()
+    {
+        com.WriteLine("n");
+    }
     /*
 	protected virtual void OnThresholdReached(EventArgs e)
 	{
@@ -154,7 +162,7 @@ public class MasterClass
                             case "d": // trovato nuovo client
                                 DiscoveryEventArgs dea = new DiscoveryEventArgs();
                                 dea.indirizzo = int.Parse(sottocomandi[1]);
-                                dea.batteria  = int.Parse(sottocomandi[2]);
+                                dea.batteria  = ((float)3.3*255)/float.Parse(sottocomandi[2]);
                                 dea.rssislave = int.Parse(sottocomandi[3]);
                                 dea.rssimaster = int.Parse(sottocomandi[4]);
                                 if (EventoNuovoClient != null) EventoNuovoClient(this, dea);

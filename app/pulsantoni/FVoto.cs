@@ -20,18 +20,24 @@ namespace pulsantoni
 
         private void BClose_Click(object sender, EventArgs e)
         {
+            Program.master.StopVoto();
             this.Hide();
         }
 
         private void FVoto_Load(object sender, EventArgs e)
         {
-            lvoti.Columns.Add("Numero pulsante", -2, HorizontalAlignment.Center);
-            lvoti.Columns.Add("Secondi dall'inizio voto", -2, HorizontalAlignment.Center);
-            lvoti.Columns[0].Width = this.Width / 2;
-            lvoti.Columns[1].Width = this.Width / 2;
+            lvoti.Columns.Add(" ", -2, HorizontalAlignment.Center);
+            lvoti.Columns.Add("Device number", -2, HorizontalAlignment.Center );
+            lvoti.Columns.Add("Seconds from start", -2, HorizontalAlignment.Center);
+            lvoti.Columns.Add(" ", -2, HorizontalAlignment.Center);
+            lvoti.Columns[0].Width = (int)(this.Width * 0.1);
+            lvoti.Columns[1].Width = (int)(this.Width * 0.4);
+            lvoti.Columns[2].Width = (int)(this.Width * 0.4);
+            lvoti.Columns[3].Width = (int)(this.Width * 0.1);
+
             lvoti.Columns[0].TextAlign = HorizontalAlignment.Center;
             lvoti.Columns[1].TextAlign = HorizontalAlignment.Center;
-            lvoti.ListViewItemSorter = new ListViewItemComparer(1);
+            lvoti.ListViewItemSorter = new ListViewItemComparer(2);
 
 
 
@@ -39,10 +45,12 @@ namespace pulsantoni
         class ListViewItemComparer : IComparer
         {
             private int col;
+            /*
             public ListViewItemComparer()
             {
                 col = 0;
             }
+            */
             public ListViewItemComparer(int column)
             {
                 col = column;
@@ -53,12 +61,17 @@ namespace pulsantoni
                 ListViewItem xl = (ListViewItem)x;
                 ListViewItem yl = (ListViewItem)y;
 
-                xi = float.Parse(xl.SubItems[1].Text );
-                yi = float.Parse(yl.SubItems[1].Text);
+                xi = float.Parse(xl.SubItems[col].Text );
+                yi = float.Parse(yl.SubItems[col].Text);
                 return (int)(xi - yi);
 
                 // positivo se x>1, 0 se uguai, neg else
             }
+        }
+
+        private void bstoppoll_Click(object sender, EventArgs e)
+        {
+            Program.master.StopVoto();
         }
     }
 }
