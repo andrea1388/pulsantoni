@@ -14,13 +14,13 @@ namespace pulsantoni
         /// The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             try
             {
                 master = new MasterClass();
                 string line;
-                System.IO.StreamReader file = new System.IO.StreamReader("conf.txt");
+                System.IO.StreamReader file = new System.IO.StreamReader(args[0]);
                 while ((line = file.ReadLine()) != null)
                 {
                     line = line.Trim();
@@ -37,7 +37,6 @@ namespace pulsantoni
                 }
 
                 file.Close();
-                master.Open();
 
 
             }

@@ -25,7 +25,7 @@ namespace pulsantoni
 
         private void FVoto_Load(object sender, EventArgs e)
         {
-            lvoti.Columns.Add("NUmero pulsante", -2, HorizontalAlignment.Center);
+            lvoti.Columns.Add("Numero pulsante", -2, HorizontalAlignment.Center);
             lvoti.Columns.Add("Secondi dall'inizio voto", -2, HorizontalAlignment.Center);
             lvoti.Columns[0].Width = this.Width / 2;
             lvoti.Columns[1].Width = this.Width / 2;

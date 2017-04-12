@@ -35,6 +35,13 @@ namespace pulsantoni
             lv1.Columns.Add("V Batt.", -2, HorizontalAlignment.Center );
             lv1.Columns.Add("Slave Sign.", -2, HorizontalAlignment.Center);
             lv1.Columns.Add("Master Sign.", -2, HorizontalAlignment.Center);
+            lv1.View = View.Details;
+            ImageList imageListSmall = new ImageList();
+            imageListSmall.Images.Add(Image.FromFile("antennarossa.jpg"));
+            imageListSmall.Images.Add(Image.FromFile("antennablu.jpg"));
+            lv1.SmallImageList = imageListSmall;
+            lv2.Columns.Add("Indirizzo", -2, HorizontalAlignment.Center);
+            lv2.View = View.Details;
             fv = new FVoto();
             fv.Owner = this;
 
@@ -46,34 +53,31 @@ namespace pulsantoni
         }
         void NuovoClient(object sender, DiscoveryEventArgs e)
         {
-            String s = e.indirizzo + " " + e.batteria + " " + e.rssislave + " " + e.rssimaster;
-            AddItem(s, listBox1);
             ListViewItem i = new ListViewItem(e.indirizzo.ToString());
             i.SubItems.Add(e.batteria.ToString());
             i.SubItems.Add(e.rssislave .ToString());
             i.SubItems.Add(e.rssimaster.ToString());
-            AddLvItem(i, lv1);
+            i.ImageIndex = 1;
+            if (e.rssislave <= 225) i.ImageIndex = 0;
+            this.Invoke((MethodInvoker)delegate { lv1.Items.Add(i); });
 
-            //SetText("Pronto", TBStato);
+            //AddLvItem(i, lv1);
         }
         void DiscFail(object sender, DiscFailEventArgs e)
         {
-            String s = e.indirizzo.ToString()+ " ko";
-            AddItem(s, listBox1);
-            //SetText("Pronto", TBStato);
+            ListViewItem i = new ListViewItem(e.indirizzo.ToString());
+            this.Invoke((MethodInvoker)delegate { lv2.Items.Add(i); });
         }
         void Voto(object sender, VotoEventArgs e)
         {
             String s = e.indirizzo  + " " + e.oravoto;
             float ov = (float)e.oravoto / (float)1000000;
             String ovs=ov.ToString("#.###");
-
-            AddItem(s, listBox1);
             ListViewItem i = new ListViewItem(e.indirizzo.ToString());
             i.SubItems.Add(ovs);
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Add(i); });
                 //SetText("Pronto", TBStato);
-            }
+        }
         void RaggiuntoStato0(object sender, EventArgs e)
         {
             SetText("Pronto", TBStato );
@@ -89,27 +93,21 @@ namespace pulsantoni
             this.Invoke((MethodInvoker)delegate { fv.Show(); });
             this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Voto in corso"; });
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Clear(); });
-
-            DelItem("", listBox1);
             SetText("InizioVoto", TBStato);
         }
         void IniziatoDiscovery(object sender, EventArgs e)
         {
-            DelItem("", listBox1);
             SetText("Discovery", TBStato);
-
+            this.Invoke((MethodInvoker)delegate { lv1.Items.Clear(); });
+            this.Invoke((MethodInvoker)delegate { lv2.Items.Clear(); });
         }
         void RxNumSlave(object sender, NumSlaveEventArgs e)
         {
             SetText(e.numslave.ToString(),TBNumMaxSlave );
-            //SetNumSlaveText(e.numslave.ToString());
-
         }
         void Messaggio(object sender, MsgEventArgs e)
         {
             SetText(e.msg, TBMsg );
-            //SetMsgText(e.msg );
-
         }
 
         private void ShowFormVoto()
@@ -174,6 +172,18 @@ namespace pulsantoni
         }
         private void Form1_Load(object sender, EventArgs e)
         {
+            try
+            {
+                Program.master.Open();
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+                this.Close();
+            }
+            tbPorta.Text = Program.master.portname;
+            tbPorta.Text = Program.master.BaudRate.ToString();
+
         }
 
 
@@ -196,6 +206,16 @@ namespace pulsantoni
         private void BIniziaVoto_Click(object sender, EventArgs e)
         {
             Program.master.StartVoto();
+        }
+
+        private void bIco_Click(object sender, EventArgs e)
+        {
+            lv1.View= System.Windows.Forms.View.SmallIcon;
+        }
+
+        private void blista_Click(object sender, EventArgs e)
+        {
+            lv1.View = System.Windows.Forms.View.Details;
         }
     }
 }
