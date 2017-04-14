@@ -59,7 +59,7 @@ void ElaboraRadio() {
   if(!radio.receiveDone()) return;
   switch(radio.DATA[0]) {
     case 's':
-        ElaboraCmdInvioSync(radio.DATA); // cmd s
+        ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
         break;
     case 'p':
         ElaboraPoll(); // cmd p
