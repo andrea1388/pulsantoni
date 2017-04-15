@@ -1,6 +1,7 @@
 #include <RFM69.h>
 #include <EEPROM.h>
-//#include <LiquidCrystal.h>
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_TFTLCD.h> // Hardware-specific library
 #define DURATACLICKLUNGO 2000 // tempo pressione pulsante per click lungo = 2 secondi
 #define TBACKOUTPULSANTE 100 // tempo blackout pulsante dopo un click
 //stati
@@ -18,6 +19,23 @@
 // stati per elaborazione seriale
 #define COMANDO 0
 #define VALORE 1
+// dati display
+#define LCD_CS A3 // Chip Select goes to Analog 3
+#define LCD_CD A2 // Command/Data goes to Analog 2
+#define LCD_WR A1 // LCD Write goes to Analog 1
+#define LCD_RD A0 // LCD Read goes to Analog 0
+#define LCD_RESET A4 // Can alternately just connect to Arduino's reset pin
+#define  BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+
+Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+
 
 
 #define pinPULSANTE 3
@@ -121,7 +139,25 @@ void setup() {
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
   Serial.println(numero_max_slave);
-  radioSetup(0);
+
+  Serial.print("TFT size is "); Serial.print(tft.width()); Serial.print("x"); Serial.println(tft.height());
+  tft.reset();
+  uint16_t identifier = tft.readID();
+  identifier=0x9341;
+  tft.begin(identifier);
+  tft.fillScreen(BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(RED);  
+  tft.setTextSize(3);
+  tft.setRotation(1);
+  tft.println("Pulsantoni");
+  tft.setTextSize(2);
+  tft.setTextColor(GREEN);  
+  tft.print("numero slave: ");
+  tft.println(numero_max_slave);
+
+  delay(20);
+  radioSetup();
   slave=(Slave **)malloc(sizeof(Slave)*numero_max_slave);
   stato.setStato(ZERO);
   //radio.readAllRegs();
@@ -129,6 +165,7 @@ void setup() {
 }
 // algoritmo 1
 void loop() {
+  unsigned long ts=0;
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
   ElaboraStato();
@@ -406,7 +443,12 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
   for(int i=0;i<3;i++) {
     //Serial.print("tento:");
     //Serial.println(indirizzo);
-    radio.send(indirizzo,pkt,1,false);
+    //radio.send(indirizzo,pkt,1,false);
+    if (!radio.send(indirizzo,pkt,1,false)) {
+      radioSetup();
+      return false;
+    }
+
     unsigned long sentTime = millis();
     while (millis() - sentTime < 20) {
       if(radio.receiveDone()) {
@@ -419,7 +461,6 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
         }
       }
     }
-    
   }
   return false;
 }
@@ -427,7 +468,10 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
 bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
   byte pkt[1];
   pkt[0]='p';
-  radio.send(indirizzo,pkt,1,false);
+  if (!radio.send(indirizzo,pkt,1,false)) {
+    radioSetup();
+    return false;
+  }
   unsigned long sentTime = millis();
   while (millis() - sentTime < 10) {
     if(radio.receiveDone()) {
@@ -471,14 +515,15 @@ bool TrasmettiPacchettoSync(byte indirizzo, unsigned long t_da_iniziovoto) {
   return false;  
 }
 
-void radioSetup(byte indirizzo) {
+void radioSetup() {
   // Hard Reset the RFM module 
+  Serial.println("radiosetup");
   pinMode(RFM69_RST, OUTPUT); 
   digitalWrite(RFM69_RST, HIGH); 
   delay(100);
   digitalWrite(RFM69_RST, LOW); 
   delay(100);
-  radio.initialize(RF69_868MHZ,indirizzo,NETWORKID);
+  radio.initialize(RF69_868MHZ,0,NETWORKID);
   /*
   radio.writeReg(0x03,0x0D); // 9k6
   radio.writeReg(0x04,0x05);

@@ -36,7 +36,7 @@ void setup() {
   digitalWrite(LEDPIN, LOW);
   impostaled(100,2900);
   radioSetup(indirizzo);
-  radio.readAllRegs();
+  //radio.readAllRegs();
   TrxSync=0;
 }
 
@@ -121,6 +121,10 @@ void ElaboraCmdDiscovery() {
   pkt[2]=radio.RSSI;
   radio.send(MASTER, pkt, 3,false);
   impostaled(30,70);
+  Serial.print("ElaboraCmdDiscovery: VBatt=");
+  Serial.print(pkt[1]);
+  Serial.print(" RSSI=");
+  Serial.println(pkt[2]);
   //stampapkt(pkt, 3);
     
 }  
