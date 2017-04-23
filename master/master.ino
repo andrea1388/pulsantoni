@@ -12,10 +12,10 @@
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
-#define RFM69_CS 10
-#define RFM69_IRQ 2
-#define RFM69_IRQN 0 
-#define RFM69_RST 9
+#define RFM69_CS 53
+#define RFM69_IRQ 21
+#define RFM69_IRQN 2 
+#define RFM69_RST 49
 // stati per elaborazione seriale
 #define COMANDO 0
 #define VALORE 1
@@ -38,7 +38,7 @@ Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 
 
-#define pinPULSANTE 3
+#define pinPULSANTE 47
 /*
 class Display {
 	public:
@@ -61,7 +61,7 @@ class Slave {
     byte fallimenti;
     //byte tensionebatteria;
     //byte rssi;
-    //bool funzionante;
+    bool funzionante;
     byte indirizzo;
     Slave(byte);
 };
@@ -94,6 +94,9 @@ void Stato::setStato(byte newstato) {
       // azzera i 5 migliori
       for(int f=0;f<5;f++) best[f]=0;
       Serial.println(F("s0"));
+      tft.setTextSize(2);
+      tft.setTextColor(GREEN);  
+      tft.println(F("Pronto"));
       break;
     case DISCOVERY:
 	  ////disp.print(0,F("Ricerca dispositivi"));
@@ -101,21 +104,31 @@ void Stato::setStato(byte newstato) {
       indirizzo_slave_discovery=1;
       numero_slave=0; // cancella la lista
       Serial.println(F("ds"));
+      tft.fillScreen(BLACK);
+      tft.setCursor(0, 0);
+      tft.println(F("Discovering nr: "));
       break;
     case INVIASYNC:
 	  //disp.print(0,F("Invio sincronismo"));
       if(numero_slave==0) {
         Serial.println(F("slave=0"));
+        tft.setCursor(0, 0);
+        tft.fillScreen(BLACK);
+        tft.println(F("Effettuare discovery"));
         stato=0;
         return;
       }
       Serial.println(F("is"));
+      tft.println(F("Invio sync"));
       break;
     case VOTO:
 	  //disp.print(0,F("Pronto per gara"));
       for(byte i=0;i<numero_slave;i++)
         slave[i]->oravoto=0;
       Serial.println(F("ip"));
+      tft.fillScreen(BLACK);
+      tft.setCursor(0, 0);
+      tft.println(F("Voto in corso"));
       break;
     default:
       stato=ZERO;
@@ -126,7 +139,7 @@ void Stato::setStato(byte newstato) {
 }
 
 Stato stato;
-RFM69 radio;
+RFM69 radio(RFM69_CS,RFM69_IRQ,true,RFM69_IRQN);
 byte numero_max_slave;
 unsigned long t_inizio_voto;
 //LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
@@ -134,7 +147,7 @@ unsigned long t_inizio_voto;
 
 void setup() {
   pinMode(pinPULSANTE, INPUT_PULLUP);
-  Serial.begin(9600);
+  Serial.begin(250000);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -159,8 +172,11 @@ void setup() {
   delay(20);
   radioSetup();
   slave=(Slave **)malloc(sizeof(Slave)*numero_max_slave);
-  stato.setStato(ZERO);
   //radio.readAllRegs();
+  tft.print(F("Frequenza: "));
+  tft.println(radio.getFrequency());
+  stato.setStato(ZERO);
+
 
 }
 // algoritmo 1
@@ -211,6 +227,7 @@ void ProcessaDatiSeriali() {
         case 'Q':
           // termina voto
           if(stato.getStato()==VOTO) {
+            tft.println(F("Voto concluso"));
             stato.setStato(ZERO);
           }
           // invia discovery a 1
@@ -264,25 +281,39 @@ void ProcessaDatiSeriali() {
 void ElaboraPulsante() {
   static unsigned long inizio_blackout=0, durata_pressione_pulsante=0,inizio_pressione_pulsante=0;
   static bool first=true;
+  static byte st[10],k=0;
   unsigned long now=millis();
-  if(digitalRead(pinPULSANTE)==0) {
-    //Serial.print("puls press: durata=");
-
+  if(digitalRead(pinPULSANTE)==0) st[k++]=1; else st[k++]=0;
+  if(k==10) k=0;
+  int s=0;
+  for(int w=0;w<10;w++) s+=st[w];
+  
+  if(s>8) {
+    //Serial.print("puls: durata, inizio, now: ");
     if((now-inizio_blackout) > TBACKOUTPULSANTE) {
-      durata_pressione_pulsante=(now-inizio_pressione_pulsante);
-      if(first) {inizio_pressione_pulsante=now; first=false;} else durata_pressione_pulsante=(now-inizio_pressione_pulsante);
-      //Serial.println(durata_pressione_pulsante);
+      if(first==true) {
+        durata_pressione_pulsante=0;
+        inizio_pressione_pulsante=now; 
+        first=false;
+      } else {
+        durata_pressione_pulsante=now-inizio_pressione_pulsante;
+      }
+      /*
+      Serial.print(durata_pressione_pulsante);
+      Serial.print(" ");
+      Serial.print(inizio_pressione_pulsante);
+      Serial.print(" ");
+      Serial.println(now);
+      */
     }
-    //Serial.print("puls press: durata=");
   } else {
-
     if(durata_pressione_pulsante>0) {
       //Serial.println("puls rel");
       if(durata_pressione_pulsante>DURATACLICKLUNGO) PulsanteClickLungo(); else PulsanteClickCorto();
-      durata_pressione_pulsante=0;
       first=true;
       inizio_blackout=now;
     }
+    durata_pressione_pulsante=0;
   }
 }
 
@@ -335,14 +366,24 @@ void Discovery() {
   } else {
     Serial.print("dx ");
     Serial.println(indirizzo_slave_discovery);
+    tft.setTextColor(RED);
+    tft.print(indirizzo_slave_discovery);
+    tft.print(" ");
   }
-  if(indirizzo_slave_discovery==numero_max_slave) stato.setStato(ZERO);
+  if(indirizzo_slave_discovery==numero_max_slave) {
+    tft.setTextColor(GREEN);
+    tft.println();
+    tft.print(F("Slave trovati: "));
+    tft.println(numero_slave);
+    stato.setStato(ZERO);
+  }
   indirizzo_slave_discovery++;
   
 }
 //algoritmo 6
 void Voto() {
   if(numero_votati==numero_slave) {
+    tft.println(F("Voto concluso"));
     stato.setStato(ZERO);
   }
   else {
@@ -389,6 +430,7 @@ void PulsanteClickCorto() {
     return;
   }
   if(s==VOTO) {
+    tft.println(F("Voto concluso"));
     stato.setStato(ZERO);
     return;
   }
@@ -401,6 +443,7 @@ void interrogaTuttiGliSlave() {
     if(slave[i]->oravoto==0) {
       if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto)) {
         slave[i]->fallimenti=0;
+        slave[numero_slave]->funzionante=true;
         if(oravoto>0) {
           slave[i]->oravoto=oravoto;
           numero_votati++;
@@ -428,8 +471,14 @@ void interrogaTuttiGliSlave() {
       } else {
         slave[i]->fallimenti++;
         if(slave[i]->fallimenti>3) {
-          Serial.print(F("e Pulsante non risponde: "));
-          Serial.println(slave[i]->indirizzo);
+          if(slave[numero_slave]->funzionante==true) {
+            slave[numero_slave]->funzionante=false;
+            Serial.print(F("e Pulsante non risponde: "));
+            Serial.println(slave[i]->indirizzo);
+            tft.setCursor(0, 200);
+            tft.print(F("slave ko: "));
+            tft.print(slave[i]->indirizzo);
+          }
         }
       }
     }
@@ -446,6 +495,8 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
     //radio.send(indirizzo,pkt,1,false);
     if (!radio.send(indirizzo,pkt,1,false)) {
       radioSetup();
+      Serial.println(F("e parametro errato")); 
+      tft.println(F("radio send failed"));
       return false;
     }
 
@@ -530,7 +581,7 @@ void radioSetup() {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
   radio.setFrequency(FREQUENCY);
   radio.setHighPower(); 
   radio.setPowerLevel(31);
@@ -542,19 +593,38 @@ void radioSetup() {
 //algoritmo 11
 // chiamato ad ogni giro di poll
 void MostraRisultatiVoto() {
-  /*
-  Serial.print("e best: ");
+  tft.fillScreen(BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextSize(3);
+  tft.setTextColor(GREEN);
+  tft.println(F("Risultati voto:"));
+  tft.println();
   for(int f=0;f<5;f++) {
     if(best[f]!=0) {
-      Serial.print(best[f]->indirizzo);
-      Serial.print(":");
-      Serial.print(best[f]->oravoto);
-      Serial.print(" ");
+      if(f==0) {
+          tft.setTextColor(RED);  
+      }
+      else {
+          tft.setTextColor(CYAN);  
+      }
+      int ovi=best[f]->oravoto/1000000;
+      int ovd=(best[f]->oravoto-ovi*1000000)/1000;
+      char str[25];
+      sprintf(str, " %3d %3d,%03d",best[f]->indirizzo,ovi,ovd);
+      /*
+      tft.print(f+1);
+      tft.print(": ");
+      tft.print(best[f]->indirizzo);
+      tft.print(": ");
+      tft.print(ovi);
+      tft.print(",");
+      */
+      tft.println(str);
     }
   }
-  Serial.println("");
-  */
-  
+  tft.setTextSize(2);
+  tft.setTextColor(GREEN);
+  tft.println();
 }
 
 void stampapkt(byte *pkt,int len) {

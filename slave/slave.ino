@@ -1,9 +1,13 @@
+/*
+ * ver 3
+ * led acceso prima possibile
+ */
 #include <RFM69.h>
 #include <EEPROM.h>
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
-#define TIMEOUTVOTO 1200000000 // 20 minuti
+#define TIMEOUTVOTO 300000000 // 5 minuti
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
@@ -25,18 +29,26 @@ bool pulsantegiapremuto;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
 void setup() {
-  // put your setup code here, to run once:
+  // accende subito il led
+  pinMode(LEDPIN, OUTPUT);
+  digitalWrite(LEDPIN, HIGH);
+  // pin pulsante col pullup
   pinMode(pinPULSANTE, INPUT_PULLUP);
+  // legge indirizzo slave dal byte 0 della eeprom
   byte indirizzo = EEPROM.read(0);
+  // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Setup"));
+  Serial.println(F("Slave - Firmware: 3"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
-  pinMode(LEDPIN, OUTPUT);
-  digitalWrite(LEDPIN, LOW);
-  impostaled(100,2900);
+  // imposta radio
   radioSetup(indirizzo);
+  // stampa frequenza
+  Serial.print(F("Frequenza: "));
+  Serial.println(radio.getFrequency());
   //radio.readAllRegs();
+  // imposta lampeggio led
+  impostaled(100,2900);
   TrxSync=0;
 }
 
@@ -45,6 +57,7 @@ void loop() {
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
   ElaboraRadio();
+  // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
   if(TrxSync!=0) {
     if((micros()-TrxSync)>TIMEOUTVOTO) {
       TrxSync=0;
@@ -67,8 +80,6 @@ void ElaboraRadio() {
     case 'd':
         ElaboraCmdDiscovery(); // cmd d
         break;
-    
-        
   }
 }
 
@@ -79,7 +90,7 @@ void ElaboraPulsante() {
       if (!pulsantegiapremuto) {
         pulsantegiapremuto=true;
         Tvoto=micros()-TrxSync+TdaInizioVoto;
-        impostaled(1000,1);
+        impostaled(1,1);
         Serial.print(F("elabpuls: tvoto="));      
         Serial.println(Tvoto,DEC);
       }
@@ -170,23 +181,6 @@ void LampeggioLED() {
     }
     
   }
-  /*
-  if ((now-tcambio) >= Tledciclo) {
-    tcambio=now;
-    //sprintf(s,(char *)F("lampeg: now=%u,tcambio=%u,ciclo=%u,on=%u"),now,tcambio,Tledciclo,Tledon);
-    sprintf(s,"lampegon: now=%u",now);
-    Serial.println(s);
-    digitalWrite(LEDPIN, LOW); 
-  } else {
-    if ((now-tcambio) >= Tledon) {
-      digitalWrite(LEDPIN, HIGH); 
-      sprintf(s,"lampegoff: now=%u",now);
-      Serial.println(s);
-    }
-    */
-    
-
-
 }
 
 void impostaled(int Ton, int Toff) {
@@ -270,7 +264,7 @@ void radioSetup(byte indirizzo) {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
   radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
