@@ -1,6 +1,7 @@
 /*
  * ver 3
  * led acceso prima possibile
+ * test send fail su discovery, poll e inviosync
  */
 #include <RFM69.h>
 #include <EEPROM.h>
@@ -26,6 +27,7 @@
 
 unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon;
 bool pulsantegiapremuto;
+byte indirizzo;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
 void setup() {
@@ -35,14 +37,14 @@ void setup() {
   // pin pulsante col pullup
   pinMode(pinPULSANTE, INPUT_PULLUP);
   // legge indirizzo slave dal byte 0 della eeprom
-  byte indirizzo = EEPROM.read(0);
+  indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
   Serial.println(F("Slave - Firmware: 3"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
-  radioSetup(indirizzo);
+  radioSetup();
   // stampa frequenza
   Serial.print(F("Frequenza: "));
   Serial.println(radio.getFrequency());
@@ -54,6 +56,7 @@ void setup() {
 
 // algoritmo 1
 void loop() {
+  static unsigned long int tckradio=0;
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
   ElaboraRadio();
@@ -65,6 +68,10 @@ void loop() {
     }
   }
   LampeggioLED();
+  if((millis()-tckradio)>1000) {
+      tckradio=millis();
+      if(radio.readReg(0x01)==0) radioSetup();
+  }
 }
 
 // algoritmo 2
@@ -114,7 +121,9 @@ void ElaboraCmdInvioSync(byte * pkt) {
   t=t<<8;
   TdaInizioVoto+=t;
   TdaInizioVoto+=radio.DATA[4];
-  radio.send(MASTER, "k", 1,false);
+  if(!radio.send(MASTER, "k", 1,false)) {
+    radioSetup();
+  }
   pulsantegiapremuto=false;
   impostaled(500,500); //1 Hz Dc=50%
   Tvoto=0;
@@ -130,7 +139,10 @@ void ElaboraCmdDiscovery() {
   pkt[0]='e';
   pkt[1]=(analogRead(PINBATTERIA)>>2);
   pkt[2]=radio.RSSI;
-  radio.send(MASTER, pkt, 3,false);
+  if(!radio.send(MASTER, pkt, 3,false)) {
+    radioSetup();
+    return;
+  }
   impostaled(30,70);
   Serial.print("ElaboraCmdDiscovery: VBatt=");
   Serial.print(pkt[1]);
@@ -148,7 +160,7 @@ void ElaboraPoll() {
   pkt[2]=(Tvoto >> 16) & 0xFF;
   pkt[3]=(Tvoto >> 8) & 0xFF;
   pkt[4]=(Tvoto) & 0xFF;
-  radio.send(MASTER, pkt, 5,false);
+  if(!radio.send(MASTER, pkt, 5,false)) radioSetup();
   //delay(1);
   //Serial.print("elabpoll:");
   //stampapkt(pkt, 3);
@@ -222,6 +234,9 @@ void ProcessaDatiSeriali() {
         }
       } else {
         Serial.println(F("comando errato"));  
+        Serial.println(radio.readReg(0x01),HEX);
+        Serial.println(radio.readReg(0x27),HEX);
+        //radioSetup();
       }
       k=0;
       prossimodato=COMANDO;   
@@ -250,8 +265,9 @@ void ProcessaDatiSeriali() {
   }
   
 
-void radioSetup(byte indirizzo) {
+void radioSetup() {
   // Hard Reset the RFM module 
+  Serial.println("radioSetup");
   pinMode(RFM69_RST, OUTPUT); 
   digitalWrite(RFM69_RST, HIGH); 
   delay(100);

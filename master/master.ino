@@ -363,6 +363,9 @@ void Discovery() {
     Serial.print(rssislave);
     Serial.print(" ");
     Serial.println(rssimaster);
+    tft.setTextColor(GREEN);
+    tft.print(indirizzo_slave_discovery);
+    tft.print(" ");
   } else {
     Serial.print("dx ");
     Serial.println(indirizzo_slave_discovery);
@@ -404,6 +407,8 @@ bool inviaSync() {
         stato.setStato(0);
         Serial.print(F("e Slave non funzionante: "));
         Serial.println(slave[i]->indirizzo);
+        tft.print(F("Slave non funzionante: "));
+        Serial.println(slave[i]->indirizzo);
 	      return false;
       }
     }
@@ -441,6 +446,7 @@ void interrogaTuttiGliSlave() {
   unsigned long oravoto;
   for(byte i=0;i<numero_slave;i++) {
     if(slave[i]->oravoto==0) {
+      ElaboraPulsante();
       if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto)) {
         slave[i]->fallimenti=0;
         slave[numero_slave]->funzionante=true;
@@ -456,11 +462,15 @@ void interrogaTuttiGliSlave() {
           for(int y=0;y<5;y++) {
             if(best[y]!=0) {
               if(oravoto<best[y]->oravoto) {
-                for(int f=y;f<4;f++) best[f+1]=best[f];
+                for(int f=y;f<4;f++) {
+                  if(best[f]!=0) best[f+1]=best[f];
+                }
+                //best[y]=slave[i];
                 break;
               };
             } else {
               best[y]=slave[i];
+              Serial.println("h");
               break;
             }
           }
@@ -470,7 +480,7 @@ void interrogaTuttiGliSlave() {
   
       } else {
         slave[i]->fallimenti++;
-        if(slave[i]->fallimenti>3) {
+        if(slave[i]->fallimenti>10) {
           if(slave[numero_slave]->funzionante==true) {
             slave[numero_slave]->funzionante=false;
             Serial.print(F("e Pulsante non risponde: "));
@@ -601,6 +611,7 @@ void MostraRisultatiVoto() {
   tft.println();
   for(int f=0;f<5;f++) {
     if(best[f]!=0) {
+    
       if(f==0) {
           tft.setTextColor(RED);  
       }
