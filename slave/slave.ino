@@ -26,11 +26,17 @@
 // stati per elaborazione seriale
 #define COMANDO 0
 #define VALORE 1
+// stati slave
+#define ZERO 0
+#define SINCRONIZZATO 1
+#define VOTATO 2
+
+
 
 
 unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon,TLastPoll;
 bool pulsantegiapremuto;
-bool sincronizzato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
+int stato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
 byte indirizzo;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
@@ -44,7 +50,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 4"));
+  Serial.println(F("Slave - Firmware: 5"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -55,7 +61,8 @@ void setup() {
   //radio.readAllRegs();
   // imposta lampeggio led
   impostaled(100,2900);
-  sincronizzato=false;
+  stato=ZERO;
+  Serial.println(F("STATO0")); 
   TrxSync=0;
 }
 
@@ -67,8 +74,11 @@ void loop() {
   ElaboraRadio();
   // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
   if((micros()-TLastPoll)>TIMEOUTVOTO) {
-    sincronizzato=false;
-    impostaled(100,2900);
+    if (stato!=ZERO) {
+      stato=ZERO;
+      impostaled(100,2900);
+      Serial.println(F("STATO0")); 
+    }
   }
   LampeggioLED();
   if((millis()-tckradio)>1000) {
@@ -95,15 +105,13 @@ void ElaboraRadio() {
 
 // algoritmo 3
 void ElaboraPulsante() {
-  if(sincronizzato) {
+  if(stato==SINCRONIZZATO) {
     if(digitalRead(pinPULSANTE)==LOW) {
-      if (!pulsantegiapremuto) {
-        pulsantegiapremuto=true;
-        Tvoto=micros()-TrxSync+TdaInizioVoto;
-        impostaled(1,1);
-        Serial.print(F("elabpuls: tvoto="));      
-        Serial.println(Tvoto,DEC);
-      }
+      stato=VOTATO;
+      Tvoto=micros()-TrxSync+TdaInizioVoto;
+      impostaled(1,1);
+      Serial.print(F("VOTATO: tvoto="));      
+      Serial.println(Tvoto,DEC);
     }
   }
 }
@@ -131,8 +139,8 @@ void ElaboraCmdInvioSync(byte * pkt) {
   pulsantegiapremuto=false;
   impostaled(500,500); //1 Hz Dc=50%
   Tvoto=0;
-  sincronizzato=true;
-  Serial.print("rxsync: trxsync=");
+  stato=SINCRONIZZATO;
+  Serial.print(F("SINCRONIZZATO trxsync="));
   Serial.print(TrxSync);
   Serial.print(" tdainiziov=");
   Serial.println(TdaInizioVoto);
@@ -149,7 +157,6 @@ void ElaboraCmdDiscovery() {
     return;
   }
   impostaled(30,70);
-  sincronizzato=false;
   Serial.print("ElaboraCmdDiscovery: VBatt=");
   Serial.print(pkt[1]);
   Serial.print(" RSSI=");
@@ -161,20 +168,28 @@ void ElaboraCmdDiscovery() {
 
 void ElaboraPoll() {
   byte pkt[5];
-  if(sincronizzato) {
-    pkt[0]='q';
-    pkt[1]=Tvoto >> 24;
-    pkt[2]=(Tvoto >> 16) & 0xFF;
-    pkt[3]=(Tvoto >> 8) & 0xFF;
-    pkt[4]=(Tvoto) & 0xFF;
-    if(!radio.send(MASTER, pkt, 5,false)) radioSetup();
-  } else {
-    pkt[0]='r';
-    if(!radio.send(MASTER, pkt, 1,false)) radioSetup();
+  byte pl;
+  switch (stato)
+  {
+    case VOTATO:
+      pkt[0]='q';
+      pkt[1]=Tvoto >> 24;
+      pkt[2]=(Tvoto >> 16) & 0xFF;
+      pkt[3]=(Tvoto >> 8) & 0xFF;
+      pkt[4]=(Tvoto) & 0xFF;
+      pl=5;
+      break;
+    case ZERO:    
+      pkt[0]='r';
+      pl=1;
+      break;
+    case SINCRONIZZATO:    
+      pkt[0]='t';
+      pl=1;
+      break;
   }
+  if(!radio.send(MASTER, pkt, pl,false)) radioSetup();
   TLastPoll=micros();
-  //delay(1);
-  //Serial.print("elabpoll:");
   //stampapkt(pkt, 3);
 }
 

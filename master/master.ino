@@ -9,6 +9,11 @@
 #define DISCOVERY 1 // discovery: cerca gli slave presenti in rete
 #define INVIASYNC 2 // pre voto. Invia l'ora del master a tutti gli slave svovati con discovery
 #define VOTO 3 // fase di acquisizione dei voti e display risultati
+// stati slave
+#define FUORISYNC 1
+#define VOTATO 2
+#define NONVOTATO 3
+
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
@@ -146,7 +151,7 @@ unsigned long t_inizio_voto;
 
 void setup() {
   pinMode(pinPULSANTE, INPUT_PULLUP);
-  Serial.begin(250000);
+  Serial.begin(9600);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -455,16 +460,25 @@ void PulsanteClickCorto() {
 //algoritmo 10
 void interrogaTuttiGliSlave() {
   unsigned long oravoto;
+  byte statoslave;
   for(byte i=0;i<numero_slave;i++) {
     if(slave[i]->oravoto==0) {
       ElaboraPulsante();
-      if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto)) {
+      if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto,&statoslave)) {
         slave[i]->fallimenti=0;
         if(!slave[i]->funzionante) {
           slave[i]->funzionante=true;
           AggiornaDisplayKo();
         }
-        if(oravoto>0) {
+        if(statoslave==FUORISYNC) {
+          Serial.print(F("e slave fuori sync:"));
+          Serial.println(slave[i]->indirizzo);
+          tft.print(F("Slave fuori sincronismo: "));
+          tft.println(slave[i]->indirizzo);
+          stato.setStato(ZERO);
+          return;
+        }
+        if(statoslave==VOTATO) {
           slave[i]->oravoto=oravoto;
           numero_votati++;
           Serial.print("v ");
@@ -556,7 +570,7 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
   return false;
 }
 
-bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
+bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslave) {
   byte pkt[1];
   pkt[0]='p';
   if (!radio.send(indirizzo,pkt,1,false)) {
@@ -579,14 +593,22 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
         t=t<<8;
         *oravoto+=t;
         *oravoto+= radio.DATA[4];
+        *statoslave=VOTATO;
         return true;
       }
       // se lo slave per qualche motivo ha perso il sync risponde r
+      // è da considerare non funzionante
+      // caso raro
       if(radio.DATA[0]=='r') {
         *oravoto=0;
-        //Serial.print(F("e slave lost sync: ")); 
-        //Serial.println(indirizzo); 
-        return false;
+        *statoslave=FUORISYNC;
+        return true;
+      }
+      // se lo slave per qualche motivo ha perso il sync risponde r
+      if(radio.DATA[0]=='t') {
+        *oravoto=0;
+        *statoslave=NONVOTATO;
+        return true;
       }
     }
   }
