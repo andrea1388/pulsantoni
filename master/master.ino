@@ -106,7 +106,7 @@ void Stato::setStato(byte newstato) {
       Serial.println(F("ds"));
       tft.fillScreen(BLACK);
       tft.setCursor(0, 0);
-      tft.println(F("Discovering nr: "));
+      tft.println(F("Discovering"));
       break;
     case INVIASYNC:
 	  //disp.print(0,F("Invio sincronismo"));
@@ -119,7 +119,6 @@ void Stato::setStato(byte newstato) {
         return;
       }
       Serial.println(F("is"));
-      tft.println(F("Invio sync"));
       break;
     case VOTO:
 	  //disp.print(0,F("Pronto per gara"));
@@ -166,6 +165,7 @@ void setup() {
   tft.println("Pulsantoni");
   tft.setTextSize(2);
   tft.setTextColor(GREEN);  
+  tft.println();
   tft.print("numero slave: ");
   tft.println(numero_max_slave);
 
@@ -175,6 +175,11 @@ void setup() {
   //radio.readAllRegs();
   tft.print(F("Frequenza: "));
   tft.println(radio.getFrequency());
+  tft.println();
+  tft.println(F("Click lungo: Discovery"));
+  tft.println(F("Click corto: Voto"));
+  tft.println(F("Effettuare il Discovery"));
+  tft.println();
   stato.setStato(ZERO);
 
 
@@ -377,7 +382,9 @@ void Discovery() {
     tft.setTextColor(GREEN);
     tft.println();
     tft.print(F("Slave trovati: "));
-    tft.println(numero_slave);
+    tft.print(numero_slave);
+    tft.print(F(" su "));
+    tft.println(numero_max_slave);
     stato.setStato(ZERO);
   }
   indirizzo_slave_discovery++;
@@ -396,6 +403,9 @@ void Voto() {
 
 //algoritmo 7
 bool inviaSync() {
+  tft.fillScreen(BLACK);
+  tft.setCursor(0, 0);
+  tft.println(F("Invio sync"));
   t_inizio_voto=micros();
   byte retry;
   for(byte i=0;i<numero_slave;i++) {
@@ -403,12 +413,13 @@ bool inviaSync() {
     while(true) {
       if(TrasmettiPacchettoSync(slave[i]->indirizzo,micros()-t_inizio_voto)) break;
       retry++;
-      if(retry==3) {
+      if(retry==10) {
         stato.setStato(0);
         Serial.print(F("e Slave non funzionante: "));
         Serial.println(slave[i]->indirizzo);
         tft.print(F("Slave non funzionante: "));
-        Serial.println(slave[i]->indirizzo);
+        tft.println(slave[i]->indirizzo);
+        tft.println(F("Controllare o ripetere discovery"));
 	      return false;
       }
     }
@@ -449,7 +460,10 @@ void interrogaTuttiGliSlave() {
       ElaboraPulsante();
       if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto)) {
         slave[i]->fallimenti=0;
-        slave[numero_slave]->funzionante=true;
+        if(!slave[i]->funzionante) {
+          slave[i]->funzionante=true;
+          AggiornaDisplayKo();
+        }
         if(oravoto>0) {
           slave[i]->oravoto=oravoto;
           numero_votati++;
@@ -470,7 +484,6 @@ void interrogaTuttiGliSlave() {
               };
             } else {
               best[y]=slave[i];
-              Serial.println("h");
               break;
             }
           }
@@ -481,25 +494,42 @@ void interrogaTuttiGliSlave() {
       } else {
         slave[i]->fallimenti++;
         if(slave[i]->fallimenti>10) {
-          if(slave[numero_slave]->funzionante==true) {
-            slave[numero_slave]->funzionante=false;
+          slave[i]->fallimenti=11;
+          if(slave[i]->funzionante) {
+            slave[i]->funzionante=false;
             Serial.print(F("e Pulsante non risponde: "));
             Serial.println(slave[i]->indirizzo);
-            tft.setCursor(0, 200);
-            tft.print(F("slave ko: "));
-            tft.print(slave[i]->indirizzo);
+            AggiornaDisplayKo();
           }
         }
       }
     }
   }
 }
+void AggiornaDisplayKo() {
+  int x=tft.getCursorX();
+  int y=tft.getCursorY();
+                Serial.println("h");
+
+  tft.fillRect(0,200,320,40,BLACK);
+  tft.setTextColor(RED);
+  tft.setCursor(0, 205);
+  for (int i=0;i<numero_slave;i++) {
+    if(!slave[i]->funzionante) {
+      tft.print(slave[i]->indirizzo);
+      Serial.println("l");
+      tft.print(" ");
+    }
+  }
+  tft.setTextColor(GREEN);
+  tft.setCursor(x, y);  
+}
 
 //algoritmo 15
 bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byte *rssimaster) {
   byte pkt[1];
   pkt[0]='d';
-  for(int i=0;i<3;i++) {
+  for(int i=0;i<10;i++) {
     //Serial.print("tento:");
     //Serial.println(indirizzo);
     //radio.send(indirizzo,pkt,1,false);
@@ -550,6 +580,13 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto) {
         *oravoto+=t;
         *oravoto+= radio.DATA[4];
         return true;
+      }
+      // se lo slave per qualche motivo ha perso il sync risponde r
+      if(radio.DATA[0]=='r') {
+        *oravoto=0;
+        //Serial.print(F("e slave lost sync: ")); 
+        //Serial.println(indirizzo); 
+        return false;
       }
     }
   }

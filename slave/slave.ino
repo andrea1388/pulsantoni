@@ -2,13 +2,16 @@
  * ver 3
  * led acceso prima possibile
  * test send fail su discovery, poll e inviosync
+ * ver 4
+ * introdotto TLastPolll e sincronizzato
+ * risponde r al poll se ha perso il sync e il master lo segnalerà come non funzionante
  */
 #include <RFM69.h>
 #include <EEPROM.h>
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
-#define TIMEOUTVOTO 300000000 // 5 minuti
+#define TIMEOUTVOTO 10000000 // 10 sec
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
@@ -25,8 +28,9 @@
 #define VALORE 1
 
 
-unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon;
+unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon,TLastPoll;
 bool pulsantegiapremuto;
+bool sincronizzato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
 byte indirizzo;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
@@ -40,7 +44,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 3"));
+  Serial.println(F("Slave - Firmware: 4"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -51,6 +55,7 @@ void setup() {
   //radio.readAllRegs();
   // imposta lampeggio led
   impostaled(100,2900);
+  sincronizzato=false;
   TrxSync=0;
 }
 
@@ -61,11 +66,9 @@ void loop() {
   ElaboraPulsante();
   ElaboraRadio();
   // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
-  if(TrxSync!=0) {
-    if((micros()-TrxSync)>TIMEOUTVOTO) {
-      TrxSync=0;
-      impostaled(100,2900);
-    }
+  if((micros()-TLastPoll)>TIMEOUTVOTO) {
+    sincronizzato=false;
+    impostaled(100,2900);
   }
   LampeggioLED();
   if((millis()-tckradio)>1000) {
@@ -92,7 +95,7 @@ void ElaboraRadio() {
 
 // algoritmo 3
 void ElaboraPulsante() {
-  if(TrxSync!=0) {
+  if(sincronizzato) {
     if(digitalRead(pinPULSANTE)==LOW) {
       if (!pulsantegiapremuto) {
         pulsantegiapremuto=true;
@@ -109,6 +112,7 @@ void ElaboraPulsante() {
 void ElaboraCmdInvioSync(byte * pkt) {
   unsigned long t;
   TrxSync=micros();
+  TLastPoll=TrxSync;
   //stampapkt(pkt, 5);
   // estrae l'informazione dal pacchetto
   t=radio.DATA[1];
@@ -127,6 +131,7 @@ void ElaboraCmdInvioSync(byte * pkt) {
   pulsantegiapremuto=false;
   impostaled(500,500); //1 Hz Dc=50%
   Tvoto=0;
+  sincronizzato=true;
   Serial.print("rxsync: trxsync=");
   Serial.print(TrxSync);
   Serial.print(" tdainiziov=");
@@ -144,6 +149,7 @@ void ElaboraCmdDiscovery() {
     return;
   }
   impostaled(30,70);
+  sincronizzato=false;
   Serial.print("ElaboraCmdDiscovery: VBatt=");
   Serial.print(pkt[1]);
   Serial.print(" RSSI=");
@@ -155,12 +161,18 @@ void ElaboraCmdDiscovery() {
 
 void ElaboraPoll() {
   byte pkt[5];
-  pkt[0]='q';
-  pkt[1]=Tvoto >> 24;
-  pkt[2]=(Tvoto >> 16) & 0xFF;
-  pkt[3]=(Tvoto >> 8) & 0xFF;
-  pkt[4]=(Tvoto) & 0xFF;
-  if(!radio.send(MASTER, pkt, 5,false)) radioSetup();
+  if(sincronizzato) {
+    pkt[0]='q';
+    pkt[1]=Tvoto >> 24;
+    pkt[2]=(Tvoto >> 16) & 0xFF;
+    pkt[3]=(Tvoto >> 8) & 0xFF;
+    pkt[4]=(Tvoto) & 0xFF;
+    if(!radio.send(MASTER, pkt, 5,false)) radioSetup();
+  } else {
+    pkt[0]='r';
+    if(!radio.send(MASTER, pkt, 1,false)) radioSetup();
+  }
+  TLastPoll=micros();
   //delay(1);
   //Serial.print("elabpoll:");
   //stampapkt(pkt, 3);
