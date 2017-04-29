@@ -71,7 +71,7 @@ namespace pulsantoni
 
         private void bstoppoll_Click(object sender, EventArgs e)
         {
-            Program.master.StopVoto();
+            if (Program.master.VotoInCorso ) Program.master.StopVoto(); else Program.master.StartVoto();
         }
     }
 }

@@ -64,8 +64,8 @@ namespace pulsantoni
             i.SubItems.Add(e.rssislave .ToString());
             i.SubItems.Add(e.rssimaster.ToString());
             i.ImageIndex = 0;
-            if (e.batteria < 3.0) i.Checked = false; else i.Checked = true;
-            if (e.rssislave <= 200) i.ImageIndex = 1;
+            if (e.batteria < 2.8) i.Checked = false; else i.Checked = true;
+            if (e.rssimaster  <= 200) i.ImageIndex = 1;
             this.Invoke((MethodInvoker)delegate { lv1.Items.Add(i); });
 
             //AddLvItem(i, lv1);
@@ -78,7 +78,7 @@ namespace pulsantoni
         void Voto(object sender, VotoEventArgs e)
         {
             float ov = (float)e.oravoto / (float)1000000;
-            String ovs=ov.ToString("#.###");
+            String ovs=ov.ToString("0.####");
             ListViewItem i = new ListViewItem(" ");
             i.SubItems.Add(e.indirizzo.ToString());
             i.SubItems.Add(ovs);
@@ -88,6 +88,7 @@ namespace pulsantoni
         {
             SetText("Ready", TBStato );
             this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Poll ended"; });
+            this.Invoke((MethodInvoker)delegate {  fv.bstoppoll.Text  = "Start Poll"; });
         }
         void InviaSync(object sender, EventArgs e)
         {
@@ -95,14 +96,15 @@ namespace pulsantoni
         }
         void InizioVoto(object sender, EventArgs e)
         {
-            //ShowFormVoto();
             this.Invoke((MethodInvoker)delegate { fv.Show(); });
             this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Poll started"; });
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Clear(); });
             SetText("Poll started", TBStato);
+            this.Invoke((MethodInvoker)delegate { fv.bstoppoll.Text = "Stop Poll"; });
         }
         void IniziatoDiscovery(object sender, EventArgs e)
         {
+            this.Invoke((MethodInvoker)delegate { fv.Hide(); });
             SetText("Discovery started", TBStato);
             this.Invoke((MethodInvoker)delegate { lv1.Items.Clear(); });
             this.Invoke((MethodInvoker)delegate { lv2.Items.Clear(); });
@@ -116,18 +118,7 @@ namespace pulsantoni
             SetText(e.msg, TBMsg );
         }
 
-        private void ShowFormVoto()
-        {
-            if (fv.InvokeRequired)
-            {
-                SetTextCallback4 d = new SetTextCallback4(ShowFormVoto);
-                this.Invoke(d, new object[] {  });
-            }
-            else
-            {
-                fv.Show();
-            }
-        }
+       
         private void SetText(string text, TextBox tb)
         {
             if (tb.InvokeRequired)
@@ -188,7 +179,7 @@ namespace pulsantoni
                 this.Close();
             }
             tbPorta.Text = Program.master.portname;
-            tbPorta.Text = Program.master.BaudRate.ToString();
+            tbSpeed.Text = Program.master.BaudRate.ToString();
             Program.master.GetMAxSlave();
         }
 

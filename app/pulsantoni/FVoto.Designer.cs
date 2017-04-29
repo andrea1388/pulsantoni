@@ -40,8 +40,9 @@
             this.lstato.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.lstato.Font = new System.Drawing.Font("Microsoft Sans Serif", 40F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lstato.Location = new System.Drawing.Point(135, 12);
-            this.lstato.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.lstato.Margin = new System.Windows.Forms.Padding(4);
             this.lstato.Name = "lstato";
+            this.lstato.ReadOnly = true;
             this.lstato.Size = new System.Drawing.Size(467, 61);
             this.lstato.TabIndex = 8;
             this.lstato.Text = ".............";
@@ -49,7 +50,7 @@
             // BClose
             // 
             this.BClose.Location = new System.Drawing.Point(610, 13);
-            this.BClose.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.BClose.Margin = new System.Windows.Forms.Padding(4);
             this.BClose.Name = "BClose";
             this.BClose.Size = new System.Drawing.Size(463, 64);
             this.BClose.TabIndex = 10;
@@ -65,7 +66,7 @@
             this.lvoti.GridLines = true;
             this.lvoti.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
             this.lvoti.Location = new System.Drawing.Point(0, 139);
-            this.lvoti.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.lvoti.Margin = new System.Windows.Forms.Padding(4);
             this.lvoti.MultiSelect = false;
             this.lvoti.Name = "lvoti";
             this.lvoti.Size = new System.Drawing.Size(1636, 766);
@@ -97,7 +98,7 @@
             this.Controls.Add(this.lstato);
             this.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
-            this.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.Margin = new System.Windows.Forms.Padding(4);
             this.Name = "FVoto";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Poll Window";
@@ -112,6 +113,6 @@
         public System.Windows.Forms.TextBox lstato;
         private System.Windows.Forms.Button BClose;
         public System.Windows.Forms.ListView lvoti;
-        private System.Windows.Forms.Button bstoppoll;
+        public System.Windows.Forms.Button bstoppoll;
     }
 }

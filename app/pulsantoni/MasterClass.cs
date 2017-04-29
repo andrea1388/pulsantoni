@@ -16,6 +16,7 @@ public class MasterClass
     public event EventHandler<DiscFailEventArgs> EventoDiscFail;
     public String portname;
     public int BaudRate;
+    private bool votoincorso;
     Thread rdr;
 	bool mustexit;
     private String stato;
@@ -53,6 +54,7 @@ public class MasterClass
         rdr.Abort();
 
     }
+    public bool  VotoInCorso { get { return votoincorso; }  }
     public void StartDiscovery()
     {
         com.WriteLine("y");
@@ -103,6 +105,7 @@ public class MasterClass
                         switch (sottocomandi[0])
                         {
                             case "s0":
+                                votoincorso = false;
                                 if (EventoStatoZero != null) EventoStatoZero(this, new EventArgs());
                                 break;
                             case "ds": // discovery
@@ -112,6 +115,7 @@ public class MasterClass
                                 if (EventoInviaSync != null) EventoInviaSync(this, new EventArgs());
                                 break;
                             case "ip": // inizio poll
+                                votoincorso = true;
                                 if (EventoInizioPoll != null) EventoInizioPoll(this, new EventArgs());
                                 break;
                             default:
@@ -162,7 +166,7 @@ public class MasterClass
                             case "d": // trovato nuovo client
                                 DiscoveryEventArgs dea = new DiscoveryEventArgs();
                                 dea.indirizzo = int.Parse(sottocomandi[1]);
-                                dea.batteria  = ((float)3.3*255)/float.Parse(sottocomandi[2]);
+                                dea.batteria  = ((float)3.0*float.Parse(sottocomandi[2]))/255;
                                 dea.rssislave = int.Parse(sottocomandi[3]);
                                 dea.rssimaster = int.Parse(sottocomandi[4]);
                                 if (EventoNuovoClient != null) EventoNuovoClient(this, dea);
