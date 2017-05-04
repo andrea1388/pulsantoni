@@ -97,6 +97,7 @@ public class MasterClass
 			try
 			{
 				String comandoricevuto = com.ReadLine().Trim();
+                Console.WriteLine(comandoricevuto);
                 String[] sottocomandi = comandoricevuto.Split(' ');
                 switch (sottocomandi.Length)
                 {

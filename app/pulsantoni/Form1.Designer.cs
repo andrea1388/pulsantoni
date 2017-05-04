@@ -57,13 +57,13 @@
             this.tbPorta.Margin = new System.Windows.Forms.Padding(4);
             this.tbPorta.Name = "tbPorta";
             this.tbPorta.ReadOnly = true;
-            this.tbPorta.Size = new System.Drawing.Size(1009, 23);
+            this.tbPorta.Size = new System.Drawing.Size(1349, 23);
             this.tbPorta.TabIndex = 1;
             this.tbPorta.Text = "COM1";
             // 
             // button2
             // 
-            this.button2.Location = new System.Drawing.Point(1332, 12);
+            this.button2.Location = new System.Drawing.Point(1688, 11);
             this.button2.Margin = new System.Windows.Forms.Padding(4);
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(183, 28);
@@ -83,7 +83,7 @@
             // 
             // tbSpeed
             // 
-            this.tbSpeed.Location = new System.Drawing.Point(1212, 16);
+            this.tbSpeed.Location = new System.Drawing.Point(1563, 14);
             this.tbSpeed.Margin = new System.Windows.Forms.Padding(4);
             this.tbSpeed.Name = "tbSpeed";
             this.tbSpeed.ReadOnly = true;
@@ -107,7 +107,7 @@
             this.TBMsg.Margin = new System.Windows.Forms.Padding(4);
             this.TBMsg.Name = "TBMsg";
             this.TBMsg.ReadOnly = true;
-            this.TBMsg.Size = new System.Drawing.Size(1108, 23);
+            this.TBMsg.Size = new System.Drawing.Size(1459, 23);
             this.TBMsg.TabIndex = 7;
             // 
             // TBStato
@@ -116,7 +116,7 @@
             this.TBStato.Margin = new System.Windows.Forms.Padding(4);
             this.TBStato.Name = "TBStato";
             this.TBStato.ReadOnly = true;
-            this.TBStato.Size = new System.Drawing.Size(516, 23);
+            this.TBStato.Size = new System.Drawing.Size(867, 23);
             this.TBStato.TabIndex = 8;
             // 
             // lv1
@@ -127,7 +127,7 @@
             this.lv1.Margin = new System.Windows.Forms.Padding(4);
             this.lv1.MultiSelect = false;
             this.lv1.Name = "lv1";
-            this.lv1.Size = new System.Drawing.Size(1285, 474);
+            this.lv1.Size = new System.Drawing.Size(1636, 686);
             this.lv1.Sorting = System.Windows.Forms.SortOrder.Ascending;
             this.lv1.TabIndex = 10;
             this.lv1.UseCompatibleStateImageBehavior = false;
@@ -135,7 +135,7 @@
             // 
             // BIniziaVoto
             // 
-            this.BIniziaVoto.Location = new System.Drawing.Point(1330, 89);
+            this.BIniziaVoto.Location = new System.Drawing.Point(1686, 88);
             this.BIniziaVoto.Margin = new System.Windows.Forms.Padding(4);
             this.BIniziaVoto.Name = "BIniziaVoto";
             this.BIniziaVoto.Size = new System.Drawing.Size(183, 28);
@@ -148,11 +148,11 @@
             // 
             this.lv2.AllowColumnReorder = true;
             this.lv2.BackColor = System.Drawing.Color.White;
-            this.lv2.Location = new System.Drawing.Point(1332, 146);
+            this.lv2.Location = new System.Drawing.Point(1688, 145);
             this.lv2.Margin = new System.Windows.Forms.Padding(4);
             this.lv2.MultiSelect = false;
             this.lv2.Name = "lv2";
-            this.lv2.Size = new System.Drawing.Size(181, 474);
+            this.lv2.Size = new System.Drawing.Size(181, 687);
             this.lv2.Sorting = System.Windows.Forms.SortOrder.Ascending;
             this.lv2.TabIndex = 12;
             this.lv2.UseCompatibleStateImageBehavior = false;
@@ -235,7 +235,7 @@
             // label6
             // 
             this.label6.AutoSize = true;
-            this.label6.Location = new System.Drawing.Point(1328, 127);
+            this.label6.Location = new System.Drawing.Point(1684, 126);
             this.label6.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.label6.Name = "label6";
             this.label6.Size = new System.Drawing.Size(197, 17);
@@ -244,7 +244,7 @@
             // 
             // bdiscstop
             // 
-            this.bdiscstop.Location = new System.Drawing.Point(1332, 49);
+            this.bdiscstop.Location = new System.Drawing.Point(1688, 48);
             this.bdiscstop.Margin = new System.Windows.Forms.Padding(4);
             this.bdiscstop.Name = "bdiscstop";
             this.bdiscstop.Size = new System.Drawing.Size(183, 28);
@@ -257,7 +257,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1551, 636);
+            this.ClientSize = new System.Drawing.Size(1884, 845);
             this.Controls.Add(this.bdiscstop);
             this.Controls.Add(this.label6);
             this.Controls.Add(this.label5);
@@ -283,6 +283,7 @@
             this.Name = "Form1";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Main";
+            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
             this.Load += new System.EventHandler(this.Form1_Load);
             this.ResumeLayout(false);

@@ -63,8 +63,9 @@ namespace pulsantoni
 
                 xi = float.Parse(xl.SubItems[col].Text );
                 yi = float.Parse(yl.SubItems[col].Text);
-                return (int)(xi - yi);
-
+                if (xi > yi) return 1;
+                if (xi < yi) return -1;
+                return 0;
                 // positivo se x>1, 0 se uguai, neg else
             }
         }

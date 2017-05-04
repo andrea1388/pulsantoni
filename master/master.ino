@@ -244,7 +244,7 @@ void ProcessaDatiSeriali() {
           break;
         case 'S':
           // scrivi indirizzo numero max slave sul byte 1 della eeprom
-          nums=atoi(valore);
+          nums=atoi((const char *)valore);
           if(nums<1 || nums>254) {
             Serial.println(F("e parametro errato"));  
           } else {
@@ -487,6 +487,7 @@ void interrogaTuttiGliSlave() {
           Serial.println(oravoto);
           
           // ordina i 5 migliori
+          /*
           for(int y=0;y<5;y++) {
             if(best[y]!=0) {
               if(oravoto<best[y]->oravoto) {
@@ -499,6 +500,25 @@ void interrogaTuttiGliSlave() {
             } else {
               best[y]=slave[i];
               break;
+            }
+          }
+          */
+          for(int y=0;y<5;y++) {
+            if(best[y]==0) {
+              best[y]=slave[i];
+              break;
+            }
+            else {
+              if(oravoto<best[y]->oravoto) {
+                for(int f=y;f<4;f++) {
+                  if(best[f]!=0)
+                     best[f+1]=best[f];
+                     break;
+                }
+                best[y]=slave[i];
+                break;
+              }
+            
             }
           }
           // aggiorna display

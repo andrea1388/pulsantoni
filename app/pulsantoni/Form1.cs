@@ -6,6 +6,8 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using System.Collections;
+
 
 namespace pulsantoni
 {
@@ -47,6 +49,9 @@ namespace pulsantoni
             lv1.CheckBoxes = true;
             lv2.Columns.Add("Device number", -2, HorizontalAlignment.Center);
             lv2.View = View.Details;
+            lv1.ListViewItemSorter = new ListViewItemComparer(1);
+            lv2.ListViewItemSorter = new ListViewItemComparer(1);
+
             fv = new FVoto();
             fv.Owner = this;
 
@@ -78,7 +83,7 @@ namespace pulsantoni
         void Voto(object sender, VotoEventArgs e)
         {
             float ov = (float)e.oravoto / (float)1000000;
-            String ovs=ov.ToString("0.####");
+            String ovs=ov.ToString("0.0000");
             ListViewItem i = new ListViewItem(" ");
             i.SubItems.Add(e.indirizzo.ToString());
             i.SubItems.Add(ovs);
@@ -233,4 +238,32 @@ namespace pulsantoni
             Program.master.StopDiscovery();
         }
     }
+    class ListViewItemComparer : IComparer
+    {
+        private int col;
+        /*
+        public ListViewItemComparer()
+        {
+            col = 0;
+        }
+        */
+        public ListViewItemComparer(int column)
+        {
+            col = column;
+        }
+        public int Compare(object x, object y)
+        {
+            float xi, yi;
+            ListViewItem xl = (ListViewItem)x;
+            ListViewItem yl = (ListViewItem)y;
+
+            xi = int.Parse(xl.SubItems[col].Text);
+            yi = int.Parse(yl.SubItems[col].Text);
+            if (xi > yi) return 1;
+            if (xi < yi) return -1;
+            return 0;
+            // positivo se x>1, 0 se uguai, neg else
+        }
+    }
+
 }
