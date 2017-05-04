@@ -49,8 +49,8 @@ namespace pulsantoni
             lv1.CheckBoxes = true;
             lv2.Columns.Add("Device number", -2, HorizontalAlignment.Center);
             lv2.View = View.Details;
-            lv1.ListViewItemSorter = new ListViewItemComparer(1);
-            lv2.ListViewItemSorter = new ListViewItemComparer(1);
+            //lv1.ListViewItemSorter = new ListViewItemComparer(1);
+            //lv2.ListViewItemSorter = new ListViewItemComparer(1);
 
             fv = new FVoto();
             fv.Owner = this;
@@ -64,7 +64,7 @@ namespace pulsantoni
         void NuovoClient(object sender, DiscoveryEventArgs e)
         {
             String ovs = e.batteria .ToString("#.#");
-            ListViewItem i = new ListViewItem(e.indirizzo.ToString());
+            ListViewItem i = new ListViewItem(e.indirizzo.ToString("00"));
             i.SubItems.Add(ovs);
             i.SubItems.Add(e.rssislave .ToString());
             i.SubItems.Add(e.rssimaster.ToString());
@@ -254,13 +254,18 @@ namespace pulsantoni
         public int Compare(object x, object y)
         {
             float xi, yi;
-            ListViewItem xl = (ListViewItem)x;
-            ListViewItem yl = (ListViewItem)y;
+            try
+            {
+                ListViewItem xl = (ListViewItem)x;
+                ListViewItem yl = (ListViewItem)y;
 
-            xi = int.Parse(xl.SubItems[col].Text);
-            yi = int.Parse(yl.SubItems[col].Text);
-            if (xi > yi) return 1;
-            if (xi < yi) return -1;
+                xi = int.Parse(xl.SubItems[col].Text);
+                yi = int.Parse(yl.SubItems[col].Text);
+                if (xi > yi) return 1;
+                if (xi < yi) return -1;
+
+            }
+            catch { };
             return 0;
             // positivo se x>1, 0 se uguai, neg else
         }
