@@ -39,10 +39,13 @@
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 
+
 Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 
-
+#define LEDVERDE 41
+#define LEDROSSO 43
+#define LEDBLU   45
 #define pinPULSANTE 47
 /*
 class Display {
@@ -151,6 +154,13 @@ unsigned long t_inizio_voto;
 
 void setup() {
   pinMode(pinPULSANTE, INPUT_PULLUP);
+  pinMode(LEDVERDE, OUTPUT);
+  pinMode(LEDROSSO, OUTPUT);
+  pinMode(LEDBLU, OUTPUT);
+  digitalWrite(LEDVERDE, LOW);
+  digitalWrite(LEDROSSO, HIGH);
+  digitalWrite(LEDBLU, LOW);
+  
   Serial.begin(9600);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
@@ -193,6 +203,9 @@ void setup() {
 void loop() {
   unsigned long ts=0;
   if(Serial.available()) ProcessaDatiSeriali();
+      digitalWrite(LEDVERDE, LOW);
+      digitalWrite(LEDROSSO, HIGH);
+      digitalWrite(LEDBLU, LOW);
   ElaboraPulsante();
   ElaboraStato();
 }
@@ -331,9 +344,15 @@ void ElaboraPulsante() {
 void ElaboraStato() {
   switch(stato.getStato()) {
     case DISCOVERY:
+      digitalWrite(LEDVERDE, LOW);
+      digitalWrite(LEDROSSO, LOW);
+      digitalWrite(LEDBLU, HIGH);
       Discovery();
       break;
     case VOTO:
+      digitalWrite(LEDVERDE, HIGH);
+      digitalWrite(LEDROSSO, LOW);
+      digitalWrite(LEDBLU, LOW);      
       Voto();
       break;
     case INVIASYNC:
@@ -390,7 +409,7 @@ void Discovery() {
     tft.print(numero_slave);
     tft.print(F(" su "));
     tft.println(numero_max_slave);
-    stato.setStato(ZERO);
+   stato.setStato(ZERO);       
   }
   indirizzo_slave_discovery++;
   
@@ -399,7 +418,10 @@ void Discovery() {
 void Voto() {
   if(numero_votati==numero_slave) {
     tft.println(F("Voto concluso"));
-    stato.setStato(ZERO);
+      digitalWrite(LEDVERDE, LOW);
+      digitalWrite(LEDROSSO, HIGH);
+      digitalWrite(LEDBLU, LOW);
+    stato.setStato(ZERO);    
   }
   else {
     interrogaTuttiGliSlave();
