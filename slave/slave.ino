@@ -95,9 +95,19 @@ void ElaboraPulsante() {
 	}
 }
 
-
-
-
+void TrasmettiVoto() {
+	pktid++;
+	trasmettipkt()
+}
+void RicevutoAck() {
+	toglidallacoda(idpkt);
+	TrasmettiFin();
+}
+void Trasmetti(dati) {
+	pkt=costruiscipkt(dati);
+	mettiincoda(pkt);
+	tx
+}
 void LampeggioLED() {
   //char s[50];
   static unsigned long tcambio=0,ison=false;
