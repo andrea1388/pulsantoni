@@ -549,8 +549,13 @@ void interrogaTuttiGliSlave() {
   
       } else {
         slave[i]->fallimenti++;
-        if(slave[i]->fallimenti>10) {
-          slave[i]->fallimenti=11;
+        if(slave[i]->fallimenti>100) {
+          if(slave[i]->fallimenti>250) slave[i]->fallimenti=250;
+          /*
+          Serial.print(slave[i]->indirizzo);
+          Serial.print(" - ");
+          Serial.println(slave[i]->fallimenti);
+          */
           if(slave[i]->funzionante) {
             slave[i]->funzionante=false;
             Serial.print(F("e Pulsante non risponde: "));
@@ -565,15 +570,12 @@ void interrogaTuttiGliSlave() {
 void AggiornaDisplayKo() {
   int x=tft.getCursorX();
   int y=tft.getCursorY();
-                Serial.println("h");
-
   tft.fillRect(0,200,320,40,BLACK);
   tft.setTextColor(RED);
   tft.setCursor(0, 205);
   for (int i=0;i<numero_slave;i++) {
     if(!slave[i]->funzionante) {
       tft.print(slave[i]->indirizzo);
-      Serial.println("l");
       tft.print(" ");
     }
   }
@@ -619,9 +621,19 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
     radioSetup();
     return false;
   }
+  Serial.print(indirizzo);
+  Serial.print(" : ");
   unsigned long sentTime = millis();
   while (millis() - sentTime < 10) {
     if(radio.receiveDone()) {
+
+
+        if(indirizzo==10) {
+          Serial.println(radio.RSSI);
+        }
+
+
+      
       //stampapkt(radio.DATA,radio.PAYLOADLEN);
       if(radio.DATA[0]=='q') {
         unsigned long t;
@@ -646,7 +658,6 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
         *statoslave=FUORISYNC;
         return true;
       }
-      // se lo slave per qualche motivo ha perso il sync risponde r
       if(radio.DATA[0]=='t') {
         *oravoto=0;
         *statoslave=NONVOTATO;
@@ -654,6 +665,10 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
       }
     }
   }
+          if(indirizzo==10) {
+          Serial.println("ko");
+        }
+
   return false;
 }
 

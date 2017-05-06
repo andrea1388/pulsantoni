@@ -5,13 +5,16 @@
  * ver 4
  * introdotto TLastPolll e sincronizzato
  * risponde r al poll se ha perso il sync e il master lo segnalerà come non funzionante
+ * 
+ * ver 6
+ * allungato a 6 min il timeout voto
  */
 #include <RFM69.h>
 #include <EEPROM.h>
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
-#define TIMEOUTVOTO 10000000 // 10 sec
+#define TIMEOUTVOTO 360000000 // 360 sec = 6 min
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
@@ -50,7 +53,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 5"));
+  Serial.println(F("Slave - Firmware: 6"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -179,11 +182,13 @@ void ElaboraPoll() {
       pkt[4]=(Tvoto) & 0xFF;
       pl=5;
       break;
-    case ZERO:    
+    case ZERO: 
+      // fuori sync   
       pkt[0]='r';
       pl=1;
       break;
     case SINCRONIZZATO:    
+      // sincronizzato ok ma non ancora votato
       pkt[0]='t';
       pl=1;
       break;
