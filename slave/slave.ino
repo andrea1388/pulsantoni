@@ -50,7 +50,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 5"));
+  Serial.println(F("Slave - Firmware: 7"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -61,9 +61,9 @@ void setup() {
   //radio.readAllRegs();
   // imposta lampeggio led
   impostaled(100,2900);
-  stato=ZERO;
-  Serial.println(F("STATO0")); 
-  TrxSync=0;
+randomSeed(analogRead(0));
+	tcheckcoda = micros();
+	nextcheck=random(1000);
 }
 
 // algoritmo 1
@@ -71,127 +71,30 @@ void loop() {
   static unsigned long int tckradio=0;
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
-  ElaboraRadio();
-  // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
-  if((micros()-TLastPoll)>TIMEOUTVOTO) {
-    if (stato!=ZERO) {
-      stato=ZERO;
-      impostaled(100,2900);
-      Serial.println(F("STATO0")); 
-    }
-  }
+  if(radio.receiveDone()) ElaboraPkt(radio.DATA);
   LampeggioLED();
   if((millis()-tckradio)>1000) {
       tckradio=millis();
       if(radio.readReg(0x01)==0) radioSetup();
   }
-}
-
-// algoritmo 2
-void ElaboraRadio() {
-  if(!radio.receiveDone()) return;
-  switch(radio.DATA[0]) {
-    case 's':
-        ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
-        break;
-    case 'p':
-        ElaboraPoll(); // cmd p
-        break;
-    case 'd':
-        ElaboraCmdDiscovery(); // cmd d
-        break;
+  if((micros()-tcheckcoda)>nextcheck) {
+	  tcheckcoda=micros();
+	  nextcheck=random(1000);
+	  elaboracoda();
   }
 }
 
-// algoritmo 3
+void ElaboraPacchettoRicevuto(byte *pkt) {
+}
+
 void ElaboraPulsante() {
-  if(stato==SINCRONIZZATO) {
-    if(digitalRead(pinPULSANTE)==LOW) {
-      stato=VOTATO;
-      Tvoto=micros()-TrxSync+TdaInizioVoto;
-      impostaled(1,1);
-      Serial.print(F("VOTATO: tvoto="));      
-      Serial.println(Tvoto,DEC);
-    }
-  }
+	if(digitalRead(pinPULSANTE)==LOW) {
+		impostaled(1,1);
+		TrasmettiVoto();
+		Serial.println(F("Votato"));      
+	}
 }
 
-// algoritmo 4
-void ElaboraCmdInvioSync(byte * pkt) {
-  unsigned long t;
-  TrxSync=micros();
-  TLastPoll=TrxSync;
-  //stampapkt(pkt, 5);
-  // estrae l'informazione dal pacchetto
-  t=radio.DATA[1];
-  t=t<<24;
-  TdaInizioVoto=t;
-  t=radio.DATA[2];
-  t=t<<16;
-  TdaInizioVoto+=t;
-  t=radio.DATA[3];
-  t=t<<8;
-  TdaInizioVoto+=t;
-  TdaInizioVoto+=radio.DATA[4];
-  if(!radio.send(MASTER, "k", 1,false)) {
-    radioSetup();
-  }
-  pulsantegiapremuto=false;
-  impostaled(500,500); //1 Hz Dc=50%
-  Tvoto=0;
-  stato=SINCRONIZZATO;
-  Serial.print(F("SINCRONIZZATO trxsync="));
-  Serial.print(TrxSync);
-  Serial.print(" tdainiziov=");
-  Serial.println(TdaInizioVoto);
-}
-
-// algoritmo 5
-void ElaboraCmdDiscovery() {
-  byte pkt[4];
-  pkt[0]='e';
-  pkt[1]=(analogRead(PINBATTERIA)>>2);
-  pkt[2]=radio.RSSI;
-  if(!radio.send(MASTER, pkt, 3,false)) {
-    radioSetup();
-    return;
-  }
-  impostaled(30,70);
-  Serial.print("ElaboraCmdDiscovery: VBatt=");
-  Serial.print(pkt[1]);
-  Serial.print(" RSSI=");
-  Serial.println(pkt[2]);
-  //stampapkt(pkt, 3);
-    
-}  
- 
-
-void ElaboraPoll() {
-  byte pkt[5];
-  byte pl;
-  switch (stato)
-  {
-    case VOTATO:
-      pkt[0]='q';
-      pkt[1]=Tvoto >> 24;
-      pkt[2]=(Tvoto >> 16) & 0xFF;
-      pkt[3]=(Tvoto >> 8) & 0xFF;
-      pkt[4]=(Tvoto) & 0xFF;
-      pl=5;
-      break;
-    case ZERO:    
-      pkt[0]='r';
-      pl=1;
-      break;
-    case SINCRONIZZATO:    
-      pkt[0]='t';
-      pl=1;
-      break;
-  }
-  if(!radio.send(MASTER, pkt, pl,false)) radioSetup();
-  TLastPoll=micros();
-  //stampapkt(pkt, 3);
-}
 
 
 
