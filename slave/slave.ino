@@ -1,4 +1,6 @@
 /*
+ * formato pacchetto
+ * ([bufsize+3][toaddress][fromaddress][ctlbyte])[destinatariofinale][t3][t2][t1][t0][dn]..[d0]
  * ver 3
  * led acceso prima possibile
  * test send fail su discovery, poll e inviosync
@@ -8,6 +10,20 @@
  */
 #include <RFM69.h>
 #include <EEPROM.h>
+
+#define INDICEDESTINATARIOFINALE 0
+#define INDICET3 1
+#define INDICET2 2
+#define INDICET1 3
+#define INDICET0 4
+#define INDICEINIZIODATI 4
+
+#define TEMPOTRATENTATIVI 50 // in ms
+
+#define MAXBESTNEIGHBOURS 5
+
+#define REG_PACKETCONFIG2 0x3D
+#define RF_PACKET2_RXRESTART                  0x04
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
@@ -31,11 +47,29 @@
 #define SINCRONIZZATO 1
 #define VOTATO 2
 
+class Messaggio {
+  public:
+    unsigned long tstart,t,tultimotentativo;
+    byte destinatariofinale,destinatario,originante;
+    byte lunghezza;
+    byte *dati[10];
+    byte tentativo;
+    bool txincorso;
+    //Messaggio(byte);
+};
 
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { segnale=-200;}
 
-
+Messaggio m;
 unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon,TLastPoll;
-bool pulsantegiapremuto;
+Nodo* bestn[MAXBESTNEIGHBOURS];
+bool pulsantegiapremuto=false,votato=false,vototrasmesso;
 int stato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
 byte indirizzo;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
@@ -50,7 +84,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 7"));
+  Serial.println(F("Slave - Firmware: 8"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -61,9 +95,10 @@ void setup() {
   //radio.readAllRegs();
   // imposta lampeggio led
   impostaled(100,2900);
-randomSeed(analogRead(0));
-	tcheckcoda = micros();
-	nextcheck=random(1000);
+  for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
+  bestn[0]->indirizzo=1;
+  tx(indirizzo,1,0,"",0);
+  
 }
 
 // algoritmo 1
@@ -71,43 +106,138 @@ void loop() {
   static unsigned long int tckradio=0;
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
-  if(radio.receiveDone()) ElaboraPkt(radio.DATA);
+  if(radio.receiveDone()) ElaboraDatiRadio();
   LampeggioLED();
+  if(votato && !vototrasmesso && !m.txincorso) {tx(indirizzo,1,0,"v",1); vototrasmesso=true;}
+  if(m.txincorso) tx2();  
   if((millis()-tckradio)>1000) {
       tckradio=millis();
       if(radio.readReg(0x01)==0) radioSetup();
   }
-  if((micros()-tcheckcoda)>nextcheck) {
-	  tcheckcoda=micros();
-	  nextcheck=random(1000);
-	  elaboracoda();
+}
+
+void tx(byte originante, byte destinatario, unsigned long t, char *dati, byte lunghezza) {
+  Serial.print(F("tx: dest/t/len "));
+  Serial.print(destinatario);
+  Serial.print(" ");
+  Serial.print(t);
+  Serial.print(" ");
+  Serial.println(lunghezza);
+  
+  m.txincorso=true;
+  m.destinatariofinale=destinatario;
+  m.originante=originante;
+  m.tstart=micros();
+  m.t=t;
+  m.tentativo=0;
+  m.lunghezza=5+lunghezza;
+  memcpy(dati,m.dati,lunghezza);
+}
+
+// richiamata continuamente finché c'è una trasmissione in corso
+void tx2() {
+  if( (m.tentativo>0) && ((millis() - m.tultimotentativo) < TEMPOTRATENTATIVI)) return;
+  m.destinatario=bestn[m.tentativo % MAXBESTNEIGHBOURS]->indirizzo;
+  if(m.destinatario==m.originante) return;
+  if(m.destinatario==0) return;
+  if(m.tentativo++==255) {m.txincorso=false; return;}  
+  Serial.print(F("tx2: tentativo/dest "));
+  Serial.print(m.tentativo);
+  Serial.print(" ");
+  Serial.println(m.destinatario);
+  txf();
+}
+
+// effettua la trasmissione del frame se il canale è libero
+void txf() {
+  Serial.print(F("txf: dest/len "));
+  Serial.print(m.destinatario);
+  Serial.print(" ");
+  Serial.println(m.lunghezza);
+  unsigned long dt=(micros()-m.tstart) + m.t;
+  m.dati[INDICET3]=dt >> 24;
+  m.dati[INDICET2]=(dt >> 16) & 0xFF;
+  m.dati[INDICET1]=(dt >> 8) & 0xFF;
+  m.dati[INDICET0]=(dt) & 0xFF;
+  m.dati[INDICEDESTINATARIOFINALE]=m.destinatariofinale;
+  m.tultimotentativo=millis();
+  radio.send(m.destinatario, m.dati, m.lunghezza, true);
+}
+
+void ElaboraDatiRadio() {
+  Serial.print(F("dati radio: sender/targer/final/rssi "));
+  Serial.print(radio.SENDERID);
+  Serial.print(" ");
+  Serial.print(radio.TARGETID);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEDESTINATARIOFINALE]);
+  Serial.print(" ");
+  Serial.println(radio.RSSI);
+  
+  if(radio.SENDERID!=1) {
+    for (int i=1;i<MAXBESTNEIGHBOURS;i++) if(radio.RSSI > bestn[i]->segnale) {
+      for (int k=i;k<MAXBESTNEIGHBOURS-1;k++) {
+        bestn[k+1]=bestn[k];
+      }
+      bestn[i]->segnale=radio.RSSI;
+      bestn[i]->indirizzo=radio.SENDERID;
+      Serial.print(F("bestn: "));
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+        Serial.print(bestn[i]->indirizzo);
+        Serial.print(" ");
+        Serial.println(bestn[i]->segnale);
+        
+      }
+    }
+  }
+  // pacchetto indirizzato a me
+  if(m.txincorso && radio.ACK_RECEIVED && radio.TARGETID==indirizzo) {
+    m.txincorso=false;
+    Serial.println("tx completed");
+  }
+  if(radio.TARGETID==indirizzo && radio.DATA[INDICEDESTINATARIOFINALE]==indirizzo) {
+    if(radio.ACKRequested()) {
+      radio.sendACK(0,0);
+      ElaboraMioPkt();
+    }
+    
+  }
+  if (radio.TARGETID==indirizzo && radio.DATA[INDICEDESTINATARIOFINALE]!=indirizzo) {
+    // è un pacchetto da ritrasmettere
+    if(!m.txincorso) {
+      Serial.println(F("pkt da ritrasm"));
+      if(radio.ACKRequested()) radio.sendACK(0,0);
+
+      unsigned long t,tmp;
+      tmp=radio.DATA[INDICET3];
+      tmp=tmp<<24;
+      t=tmp;
+      tmp=radio.DATA[INDICET2];
+      tmp=tmp<<16;
+      t+=tmp;
+      tmp=radio.DATA[INDICET1];
+      tmp=tmp<<8;
+      t+=tmp;
+      tmp=radio.DATA[INDICET0];
+      t+=tmp;
+      tx(radio.SENDERID,radio.DATA[INDICEDESTINATARIOFINALE],t,radio.DATA+5,radio.PAYLOADLEN-5);
+    }
   }
 }
 
-void ElaboraPacchettoRicevuto(byte *pkt) {
+void ElaboraMioPkt() {
+  Serial.println(F("ElaboraMioPkt: "));
 }
-
 void ElaboraPulsante() {
 	if(digitalRead(pinPULSANTE)==LOW) {
 		impostaled(1,1);
-		TrasmettiVoto();
+		votato=true;
+    vototrasmesso=false;
 		Serial.println(F("Votato"));      
 	}
 }
 
-void TrasmettiVoto() {
-	pktid++;
-	trasmettipkt()
-}
-void RicevutoAck() {
-	toglidallacoda(idpkt);
-	TrasmettiFin();
-}
-void Trasmetti(dati) {
-	pkt=costruiscipkt(dati);
-	mettiincoda(pkt);
-	tx
-}
+
 void LampeggioLED() {
   //char s[50];
   static unsigned long tcambio=0,ison=false;
@@ -220,10 +350,11 @@ void radioSetup() {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening e no address filter
   radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
+  radio.promiscuous(true);
 }
 
 void stampapkt(byte *pkt,int len) {
