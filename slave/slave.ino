@@ -53,15 +53,80 @@
 
 class Messaggio {
   public:
-    unsigned long tstart,t,tultimotentativo;
-    byte destinatario;
+    unsigned long tstart,tultimotentativo;
+    byte destinatario,mittente;
     byte lunghezza;
-    byte *dati[19];
+    byte dati[19];
     byte tentativo;
     bool txincorso;
-    //Messaggio(byte);
+    PrendiDaRadio(RFM69*);
+    PrendiDaPkt(Messaggio);
+    //Messaggio();
+    unsigned long GetTime();
+    void SetTime(unsigned long);
+    void print();
+    
+    
 };
+void Messaggio::print() {
+  Serial.print(F("msg: mitt/dest/orig/finale/h1/h2/h3/t/len/dati "));
+  Serial.print(mittente);
+  Serial.print("/");
+  Serial.print(destinatario);
+  Serial.print("/");
+  Serial.print(dati[INDICEMITTENTEINIZIALE]);
+  Serial.print("/");
+  Serial.print(dati[INDICEDESTINATARIOFINALE]);
+  Serial.print("/");
+  for(byte k=0;k<3;k++) {Serial.print(dati[INDICEH1+k]); Serial.print("/");}
+  Serial.print(GetTime());
+  Serial.print("/");
+  Serial.print(lunghezza);
+  Serial.print("/");
+  for(byte k=0;k<lunghezza;k++) {Serial.print(dati[INDICEINIZIODATI+k],HEX);}
+  Serial.println("");
+}
+unsigned long Messaggio::GetTime() {
+  unsigned long tt,tmp;
+  tmp=dati[INDICET3];
+  tmp=tmp<<24;
+  tt=tmp;
+  tmp=dati[INDICET2];
+  tmp=tmp<<16;
+  tt+=tmp;
+  tmp=dati[INDICET1];
+  tmp=tmp<<8;
+  tt+=tmp;
+  tmp=dati[INDICET0];
+  tt+=tmp;
+  return tt;
+}
 
+void Messaggio::SetTime(unsigned long dt) {
+  dati[INDICET3]=dt >> 24;
+  dati[INDICET2]=(dt >> 16) & 0xFF;
+  dati[INDICET1]=(dt >> 8) & 0xFF;
+  dati[INDICET0]=(dt) & 0xFF;
+}
+
+Messaggio::PrendiDaRadio(RFM69 *r) {
+  destinatario=r->TARGETID;
+  mittente=r->SENDERID;
+  for(byte k=0;k<r->DATALEN;k++) dati[k]=r->DATA[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=r->DATALEN-INDICEINIZIODATI;
+}
+Messaggio::PrendiDaPkt(Messaggio m) {
+  destinatario=m.destinatario;
+  mittente=m.mittente;
+  for(byte k=0;k<m.lunghezza+INDICEINIZIODATI;k++) dati[k]=m.dati[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=m.lunghezza;
+}
 class Nodo {
   public:
     byte indirizzo;
@@ -102,7 +167,7 @@ void setup() {
   for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
   // void tx(byte destinatariofinale, byte mittenteoriginale, byte h1, byte h2, byte h3, unsigned long t, char *dati, byte lunghezza) {
 
-  tx(1,indirizzo,0,0,0,0,"",0);
+  tx(1,"abcd",4);
   
 }
 
@@ -113,33 +178,29 @@ void loop() {
   ElaboraPulsante();
   if(radio.receiveDone()) ElaboraDatiRadio();
   LampeggioLED();
-  if(votato && !vototrasmesso && !m.txincorso) {tx(1,indirizzo,0,0,0,0,"v",1); vototrasmesso=true;}
+  if(votato && !vototrasmesso && !m.txincorso) {tx(1,"v",1); vototrasmesso=true;}
   if(m.txincorso) tx2();  
   if((millis()-tckradio)>1000) {
       tckradio=millis();
       if(radio.readReg(0x01)==0) radioSetup();
+      votato=false;
   }
 }
 
-void tx(byte destinatariofinale, byte mittenteoriginale, byte h1, byte h2, byte h3, unsigned long t, char *dati, byte lunghezza) {
-  Serial.print(F("tx: dest/t/len "));
-  Serial.print(destinatariofinale);
-  Serial.print(" ");
-  Serial.print(t);
-  Serial.print(" ");
-  Serial.println(lunghezza);
-  
+void tx(byte destinatario, char *dati, byte lunghezza) {
+  Serial.println(F("tx"));
+  m.mittente=indirizzo;
+  m.dati[INDICEDESTINATARIOFINALE]=destinatario;
+  m.dati[INDICEMITTENTEINIZIALE]=indirizzo;
+  m.dati[INDICEH1]=0;
+  m.dati[INDICEH2]=0;
+  m.dati[INDICEH3]=0;
   m.txincorso=true;
-  m.dati[INDICEDESTINATARIOFINALE]=destinatariofinale;
-  m.dati[INDICEMITTENTEINIZIALE]=mittenteoriginale;
-  m.dati[INDICEH1]=h1;
-  m.dati[INDICEH2]=h2;
-  m.dati[INDICEH3]=h3;
   m.tstart=micros();
-  m.t=t;
+  m.SetTime(0);
   m.tentativo=0;
   m.lunghezza=lunghezza;
-  memcpy(dati,m.dati+INDICEINIZIODATI,lunghezza);
+  for(byte i=0;i<lunghezza;i++) m.dati[INDICEINIZIODATI+i]=dati[i];
 }
 
 // richiamata continuamente finché c'è una trasmissione in corso
@@ -165,21 +226,23 @@ void tx2() {
 
 // effettua la trasmissione del frame se il canale è libero
 void txf() {
-  Serial.print(F("txf: dest/len "));
-  Serial.print(m.destinatario);
-  Serial.print(" ");
-  Serial.println(m.lunghezza);
-  unsigned long dt=(micros()-m.tstart) + m.t;
-  m.dati[INDICET3]=dt >> 24;
-  m.dati[INDICET2]=(dt >> 16) & 0xFF;
-  m.dati[INDICET1]=(dt >> 8) & 0xFF;
-  m.dati[INDICET0]=(dt) & 0xFF;
+  Serial.print(F("txf: dest/len/dt "));
+  unsigned long dt=(micros()-m.tstart);
+  m.SetTime(m.GetTime()+dt);
   m.tultimotentativo=millis();
+  m.print();
+
   radio.send(m.destinatario, m.dati, m.lunghezza+INDICEINIZIODATI, true);
 }
 
 void ElaboraDatiRadio() {
-  Serial.print(F("dati radio: sender/target/iniziale/finale/h1/h2/h3/rssi "));
+  Messaggio rxm;
+  //=new Messaggio();
+  rxm.PrendiDaRadio(&radio);
+  Serial.print(F("dati radio: "));
+  rxm.print();
+  
+  /*
   Serial.print(radio.SENDERID);
   Serial.print(" ");
   Serial.print(radio.TARGETID);
@@ -195,7 +258,46 @@ void ElaboraDatiRadio() {
   Serial.print(radio.DATA[INDICEH3]);
   Serial.print(" ");
   Serial.println(radio.RSSI);
+  */
+  CostruisciListaNodi();
+
+  // se non è roba per me buttalo
+  if(radio.TARGETID!=indirizzo) return;
   
+  // ack indirizzato a me
+  if(m.txincorso && radio.ACK_RECEIVED) {
+    m.txincorso=false;
+    Serial.println("tx completed");
+    return;
+  }
+  // mio pacchetto non ack
+  if(radio.DATA[INDICEDESTINATARIOFINALE]==indirizzo) {
+    if(radio.ACKRequested()) {
+      radio.sendACK(0,0);
+      ElaboraMioPkt(&rxm);
+      return;
+    }
+    
+  }
+
+  // pkt indirizzato a me ma con destinatario finale diverso = da ritrasmettere
+  if (radio.DATA[INDICEDESTINATARIOFINALE]!=indirizzo) {
+    // è un pacchetto da ritrasmettere
+    // se ho già un okt in corso di trasmissione non do l'ack e lo butto
+    if(!m.txincorso) {
+      if(radio.ACKRequested()) radio.sendACK(0,0);
+      Serial.println(F("pkt da ritrasm"));
+      m.PrendiDaPkt(rxm);
+      m.txincorso=true;
+      m.mittente=indirizzo;
+      for(byte h=0;h<3;h++) if(m.dati[INDICEH1+h]==0) {m.dati[INDICEH1+h]=indirizzo; break;}
+      m.print();
+
+    }
+  }
+}
+
+void CostruisciListaNodi() {
   if(radio.SENDERID!=1) {
     // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
     bool giainlista=false;
@@ -215,48 +317,16 @@ void ElaboraDatiRadio() {
       
     }
   }
-  // pacchetto indirizzato a me
-  if(m.txincorso && radio.ACK_RECEIVED && radio.TARGETID==indirizzo) {
-    m.txincorso=false;
-    Serial.println("tx completed");
-  }
-  if(radio.TARGETID==indirizzo && radio.DATA[INDICEDESTINATARIOFINALE]==indirizzo) {
-    if(radio.ACKRequested()) {
-      radio.sendACK(0,0);
-      ElaboraMioPkt();
-    }
-    
-  }
-  if (radio.TARGETID==indirizzo && radio.DATA[INDICEDESTINATARIOFINALE]!=indirizzo) {
-    // è un pacchetto da ritrasmettere
-    if(!m.txincorso) {
-      Serial.println(F("pkt da ritrasm"));
-      if(radio.ACKRequested()) radio.sendACK(0,0);
-      // aggiunge l'indirizzo di questo nodo come ultimo salto
-      for(byte h=0;h<3;h++) if(radio.DATA[INDICEH1+h]==0) radio.DATA[INDICEH1+h]=indirizzo;
-      unsigned long t,tmp;
-      tmp=radio.DATA[INDICET3];
-      tmp=tmp<<24;
-      t=tmp;
-      tmp=radio.DATA[INDICET2];
-      tmp=tmp<<16;
-      t+=tmp;
-      tmp=radio.DATA[INDICET1];
-      tmp=tmp<<8;
-      t+=tmp;
-      tmp=radio.DATA[INDICET0];
-      t+=tmp;
-      // void tx(byte destinatariofinale, byte mittenteoriginale, byte h1, byte h2, byte h3, unsigned long t, char *dati, byte lunghezza) {
-      tx(radio.DATA[INDICEDESTINATARIOFINALE],radio.DATA[INDICEMITTENTEINIZIALE],radio.DATA[INDICEH1],radio.DATA[INDICEH2],radio.DATA[INDICEH3],t,radio.DATA+INDICEINIZIODATI,radio.PAYLOADLEN-INDICEINIZIODATI);
-    }
-  }
+  
+}
+void ElaboraMioPkt(Messaggio *rxm) {
+  Serial.println(F("ElaboraMioPkt: "));
+  
 }
 
-void ElaboraMioPkt() {
-  Serial.println(F("ElaboraMioPkt: "));
-}
 void ElaboraPulsante() {
-	if(digitalRead(pinPULSANTE)==LOW) {
+	if(digitalRead(pinPULSANTE)==LOW && !votato) {
+  
 		impostaled(1,1);
 		votato=true;
     vototrasmesso=false;
