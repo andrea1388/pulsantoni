@@ -1,7 +1,30 @@
-#include <RFM69.h>
+/*
+ * Master
+ * Sistema polling con slave repeaters
+ * versione iniziale master.psr.1
+ */
+ #include <RFM69.h>
 #include <EEPROM.h>
+
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_TFTLCD.h> // Hardware-specific library
+
+#define INDICEMITTENTEINIZIALE 0
+#define INDICEDESTINATARIOFINALE 1
+#define INDICEH1 2
+#define INDICEH2 3
+#define INDICEH3 4
+#define INDICET3 5
+#define INDICET2 6
+#define INDICET1 7
+#define INDICET0 8
+#define INDICEINIZIODATI 9
+
+#define TEMPOTRATENTATIVI 50 // in ms
+
+#define MAXBESTNEIGHBOURS 5
+
+
 #define DURATACLICKLUNGO 2000 // tempo pressione pulsante per click lungo = 2 secondi
 #define TBACKOUTPULSANTE 100 // tempo blackout pulsante dopo un click
 //stati
@@ -47,6 +70,7 @@ Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 #define LEDROSSO 43
 #define LEDBLU   45
 #define pinPULSANTE 47
+#define MASTER 0
 /*
 class Display {
 	public:
@@ -152,6 +176,94 @@ unsigned long t_inizio_voto;
 //LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
 
+class Messaggio {
+  public:
+    unsigned long tstart,tultimotentativo;
+    byte destinatario,mittente;
+    byte lunghezza;
+    byte dati[19];
+    byte tentativo;
+    bool txincorso;
+    PrendiDaRadio(RFM69*);
+    PrendiDaPkt(Messaggio);
+    //Messaggio();
+    unsigned long GetTime();
+    void SetTime(unsigned long);
+    void print();
+    
+    
+};
+void Messaggio::print() {
+  Serial.print(F("msg: mitt/dest/orig/finale/h1/h2/h3/t/len/dati "));
+  Serial.print(mittente);
+  Serial.print("/");
+  Serial.print(destinatario);
+  Serial.print("/");
+  Serial.print(dati[INDICEMITTENTEINIZIALE]);
+  Serial.print("/");
+  Serial.print(dati[INDICEDESTINATARIOFINALE]);
+  Serial.print("/");
+  for(byte k=0;k<3;k++) {Serial.print(dati[INDICEH1+k]); Serial.print("/");}
+  Serial.print(GetTime());
+  Serial.print("/");
+  Serial.print(lunghezza);
+  Serial.print("/");
+  for(byte k=0;k<lunghezza;k++) {Serial.print(dati[INDICEINIZIODATI+k],HEX);}
+  Serial.println("");
+}
+unsigned long Messaggio::GetTime() {
+  unsigned long tt,tmp;
+  tmp=dati[INDICET3];
+  tmp=tmp<<24;
+  tt=tmp;
+  tmp=dati[INDICET2];
+  tmp=tmp<<16;
+  tt+=tmp;
+  tmp=dati[INDICET1];
+  tmp=tmp<<8;
+  tt+=tmp;
+  tmp=dati[INDICET0];
+  tt+=tmp;
+  return tt;
+}
+
+void Messaggio::SetTime(unsigned long dt) {
+  dati[INDICET3]=dt >> 24;
+  dati[INDICET2]=(dt >> 16) & 0xFF;
+  dati[INDICET1]=(dt >> 8) & 0xFF;
+  dati[INDICET0]=(dt) & 0xFF;
+}
+
+Messaggio::PrendiDaRadio(RFM69 *r) {
+  destinatario=r->TARGETID;
+  mittente=r->SENDERID;
+  for(byte k=0;k<r->DATALEN;k++) dati[k]=r->DATA[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=r->DATALEN-INDICEINIZIODATI;
+}
+Messaggio::PrendiDaPkt(Messaggio m) {
+  destinatario=m.destinatario;
+  mittente=m.mittente;
+  for(byte k=0;k<m.lunghezza+INDICEINIZIODATI;k++) dati[k]=m.dati[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=m.lunghezza;
+}
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
+
+Messaggio m;
+Nodo* bestn[MAXBESTNEIGHBOURS];
+byte indirizzo=0;
+
 void setup() {
   pinMode(pinPULSANTE, INPUT_PULLUP);
   pinMode(LEDVERDE, OUTPUT);
@@ -208,7 +320,160 @@ void loop() {
       digitalWrite(LEDBLU, LOW);
   ElaboraPulsante();
   ElaboraStato();
+  if(m.txincorso) tx2();  
+  if(radio.receiveDone()) ElaboraDatiRadio();
 }
+
+bool tx(byte destinatario, char *dati, byte lunghezza) {
+  if(m.txincorso) {
+    Serial.println(F("tx busy"));
+    return false;
+  }
+  Serial.println(F("tx"));
+  m.mittente=indirizzo;
+  m.dati[INDICEDESTINATARIOFINALE]=destinatario;
+  m.dati[INDICEMITTENTEINIZIALE]=indirizzo;
+  m.dati[INDICEH1]=0;
+  m.dati[INDICEH2]=0;
+  m.dati[INDICEH3]=0;
+  m.txincorso=true;
+  m.tstart=micros();
+  m.SetTime(0);
+  m.tentativo=0;
+  m.lunghezza=lunghezza;
+  for(byte i=0;i<lunghezza;i++) m.dati[INDICEINIZIODATI+i]=dati[i];
+  return true;
+}
+
+// richiamata continuamente finché c'è una trasmissione in corso
+void tx2() {
+  // dal secondo tentativo aspetta il timeout
+  if( (m.tentativo>0) && ((millis() - m.tultimotentativo) < TEMPOTRATENTATIVI)) return;
+  if (m.tentativo<2) m.destinatario=m.dati[INDICEDESTINATARIOFINALE]; 
+  else m.destinatario=bestn[m.tentativo % MAXBESTNEIGHBOURS]->indirizzo;
+  if(m.tentativo++==10) {m.txincorso=false; return;}  
+  if(m.destinatario==m.dati[INDICEMITTENTEINIZIALE]) return;
+  if(m.destinatario==m.dati[INDICEH1]) return;
+  if(m.destinatario==m.dati[INDICEH2]) return;
+  if(m.destinatario==m.dati[INDICEH3]) return;
+  // se i 3 salti sono completi è possibile mandare solo al destinatario finale
+  if(m.destinatario!=m.dati[INDICEDESTINATARIOFINALE] && m.dati[INDICEH3]!=0) return;
+  if(m.destinatario==255) return;
+  Serial.print(F("tx2: tentativo/dest "));
+  Serial.print(m.tentativo);
+  Serial.print(" ");
+  Serial.println(m.destinatario);
+  txf();
+}
+
+// effettua la trasmissione del frame se il canale è libero
+void txf() {
+  Serial.print(F("txf: dest/len/dt "));
+  unsigned long dt=(micros()-m.tstart);
+  m.SetTime(m.GetTime()+dt);
+  m.tultimotentativo=millis();
+  m.print();
+
+  radio.send(m.destinatario, m.dati, m.lunghezza+INDICEINIZIODATI, true);
+}
+
+void ElaboraDatiRadio() {
+  Messaggio rxm;
+  //=new Messaggio();
+  rxm.PrendiDaRadio(&radio);
+  Serial.print(F("dati radio: "));
+  rxm.print();
+  
+  /*
+  Serial.print(radio.SENDERID);
+  Serial.print(" ");
+  Serial.print(radio.TARGETID);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEMITTENTEINIZIALE]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEDESTINATARIOFINALE]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEH1]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEH2]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEH3]);
+  Serial.print(" ");
+  Serial.println(radio.RSSI);
+  */
+  CostruisciListaNodi();
+
+  // se non è roba per me buttalo
+  if(radio.TARGETID!=indirizzo) return;
+  
+  // ack indirizzato a me
+  if(m.txincorso && radio.ACK_RECEIVED) {
+    m.txincorso=false;
+    Serial.println("tx completed");
+    return;
+  }
+  // mio pacchetto non ack
+  if(radio.DATA[INDICEDESTINATARIOFINALE]==indirizzo) {
+    if(radio.ACKRequested()) {
+      radio.sendACK(0,0);
+      switch(rxm.dati[INDICEINIZIODATI]) {
+        case 'e':
+          // msg risposta a discovery
+          elabora
+          aumenta slave disc corrente
+            break;
+        case 'p':
+            break;
+        case 'd':
+            break;
+      }
+      return;
+    }
+    
+  }
+
+  // pkt indirizzato a me ma con destinatario finale diverso = da ritrasmettere
+  if (radio.DATA[INDICEDESTINATARIOFINALE]!=indirizzo) {
+    // è un pacchetto da ritrasmettere
+    // se ho già un okt in corso di trasmissione non do l'ack e lo butto
+    if(!m.txincorso) {
+      if(radio.ACKRequested()) radio.sendACK(0,0);
+      Serial.println(F("pkt da ritrasm"));
+      m.PrendiDaPkt(rxm);
+      m.txincorso=true;
+      m.mittente=indirizzo;
+      for(byte h=0;h<3;h++) if(m.dati[INDICEH1+h]==255) {m.dati[INDICEH1+h]=indirizzo; break;}
+      m.print();
+
+    }
+  }
+}
+
+void CostruisciListaNodi() {
+  if(radio.SENDERID!=MASTER) {
+    // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
+    bool giainlista=false;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==radio.SENDERID) {bestn[i]->segnale=radio.RSSI; giainlista=true;}
+    if(!giainlista) {
+      int minimo=bestn[0]->segnale;
+      byte indicemin=0;
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+      if(radio.RSSI>minimo) {bestn[indicemin]->segnale=radio.RSSI; bestn[indicemin]->indirizzo=radio.SENDERID;}
+    }
+      
+    Serial.print(F("bestn: "));
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+      Serial.print(bestn[i]->indirizzo);
+      Serial.print(" ");
+      Serial.println(bestn[i]->segnale);
+      
+    }
+  }
+  
+}
+
+
+
 
 void ProcessaDatiSeriali() {
   static byte comando=0,prossimodato=0,k=0,valore[5];
@@ -363,56 +628,13 @@ void ElaboraStato() {
 
 //algoritmo 5
 void Discovery() {
-  /*
-  Serial.println("Discovery");
-  Serial.print("disc:corrente: ");
-  Serial.println(indirizzo_slave_discovery);
-  Serial.print(" numero_slave: ");
-  Serial.println(numero_slave);
-  */
-  byte livbatt;
-  byte rssislave;
-  byte rssimaster;
-  if(interrogaSlaveDiscovery(indirizzo_slave_discovery,&livbatt,&rssislave,&rssimaster)) {
-    slave[numero_slave]=new Slave(indirizzo_slave_discovery);
-    slave[numero_slave]->oravoto=0;
-    slave[numero_slave]->fallimenti=0;
-    //slave[numero_slave]->tensionebatteria=livbatt;
-    //slave[numero_slave]->rssi=rssi;
-    //slave[numero_slave]->funzionante=true;
-    numero_slave++;
-    // Aggiorna display
-	  //disp.print(1,10,numero_slave);
-    // Aggiorna seriale
-    Serial.print("d ");
-    Serial.print(indirizzo_slave_discovery);
-    Serial.print(" ");
-    Serial.print(livbatt);
-    Serial.print(" ");
-    Serial.print(rssislave);
-    Serial.print(" ");
-    Serial.println(rssimaster);
-    tft.setTextColor(GREEN);
-    tft.print(indirizzo_slave_discovery);
-    tft.print(" ");
-  } else {
-    Serial.print("dx ");
-    Serial.println(indirizzo_slave_discovery);
-    tft.setTextColor(RED);
-    tft.print(indirizzo_slave_discovery);
-    tft.print(" ");
-  }
-  if(indirizzo_slave_discovery==numero_max_slave) {
-    tft.setTextColor(GREEN);
-    tft.println();
-    tft.print(F("Slave trovati: "));
-    tft.print(numero_slave);
-    tft.print(F(" su "));
-    tft.println(numero_max_slave);
-   stato.setStato(ZERO);       
-  }
-  indirizzo_slave_discovery++;
-  
+  static byte last=0;
+  if(m.txincorso) return;
+  if(indirizzo_slave_discovery==last) return;
+  last=indirizzo_slave_discovery;
+  byte pkt[1];
+  pkt[0]='d';
+  tx(indirizzo_slave_discovery,pkt,1);
 }
 //algoritmo 6
 void Voto() {
@@ -583,36 +805,6 @@ void AggiornaDisplayKo() {
   tft.setCursor(x, y);  
 }
 
-//algoritmo 15
-bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byte *rssimaster) {
-  byte pkt[1];
-  pkt[0]='d';
-  for(int i=0;i<10;i++) {
-    //Serial.print("tento:");
-    //Serial.println(indirizzo);
-    //radio.send(indirizzo,pkt,1,false);
-    if (!radio.send(indirizzo,pkt,1,false)) {
-      radioSetup();
-      Serial.println(F("e parametro errato")); 
-      tft.println(F("radio send failed"));
-      return false;
-    }
-
-    unsigned long sentTime = millis();
-    while (millis() - sentTime < 20) {
-      if(radio.receiveDone()) {
-        //stampapkt(radio.DATA,radio.PAYLOADLEN);
-        if(radio.DATA[0]=='e') {
-          *livbatt=radio.DATA[1];
-          *rssislave=radio.DATA[2];
-          *rssimaster=radio.RSSI;
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
 
 bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslave) {
   byte pkt[1];
@@ -680,7 +872,7 @@ bool TrasmettiPacchettoSync(byte indirizzo, unsigned long t_da_iniziovoto) {
 	pkt[2]=(t_da_iniziovoto >> 16) & 0xFF;
 	pkt[3]=(t_da_iniziovoto >> 8) & 0xFF;
 	pkt[4]=(t_da_iniziovoto) & 0xFF;
-	radio.send(indirizzo, pkt, 5);
+	if (tx(indirizzo, pkt, 5)) ;
   unsigned long sentTime = millis();
   while (millis() - sentTime < 20) {
     if(radio.receiveDone()) {

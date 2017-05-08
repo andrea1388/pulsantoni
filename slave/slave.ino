@@ -1,16 +1,25 @@
 /*
- * ver 3
- * led acceso prima possibile
- * test send fail su discovery, poll e inviosync
- * ver 4
- * introdotto TLastPolll e sincronizzato
- * risponde r al poll se ha perso il sync e il master lo segnalerà come non funzionante
- * 
- * ver 6
- * allungato a 6 min il timeout voto
+ * Slave
+ * Sistema polling con slave repeaters
+ * versione iniziale psr1
  */
 #include <RFM69.h>
 #include <EEPROM.h>
+
+#define INDICEMITTENTEINIZIALE 0
+#define INDICEDESTINATARIOFINALE 1
+#define INDICEH1 2
+#define INDICEH2 3
+#define INDICEH3 4
+#define INDICET3 5
+#define INDICET2 6
+#define INDICET1 7
+#define INDICET0 8
+#define INDICEINIZIODATI 9
+
+#define TEMPOTRATENTATIVI 50 // in ms
+
+#define MAXBESTNEIGHBOURS 5
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
@@ -34,7 +43,92 @@
 #define SINCRONIZZATO 1
 #define VOTATO 2
 
+class Messaggio {
+  public:
+    unsigned long tstart,tultimotentativo;
+    byte destinatario,mittente;
+    byte lunghezza;
+    byte dati[19];
+    byte tentativo;
+    bool txincorso;
+    PrendiDaRadio(RFM69*);
+    PrendiDaPkt(Messaggio);
+    //Messaggio();
+    unsigned long GetTime();
+    void SetTime(unsigned long);
+    void print();
+    
+    
+};
+void Messaggio::print() {
+  Serial.print(F("msg: mitt/dest/orig/finale/h1/h2/h3/t/len/dati "));
+  Serial.print(mittente);
+  Serial.print("/");
+  Serial.print(destinatario);
+  Serial.print("/");
+  Serial.print(dati[INDICEMITTENTEINIZIALE]);
+  Serial.print("/");
+  Serial.print(dati[INDICEDESTINATARIOFINALE]);
+  Serial.print("/");
+  for(byte k=0;k<3;k++) {Serial.print(dati[INDICEH1+k]); Serial.print("/");}
+  Serial.print(GetTime());
+  Serial.print("/");
+  Serial.print(lunghezza);
+  Serial.print("/");
+  for(byte k=0;k<lunghezza;k++) {Serial.print(dati[INDICEINIZIODATI+k],HEX);}
+  Serial.println("");
+}
+unsigned long Messaggio::GetTime() {
+  unsigned long tt,tmp;
+  tmp=dati[INDICET3];
+  tmp=tmp<<24;
+  tt=tmp;
+  tmp=dati[INDICET2];
+  tmp=tmp<<16;
+  tt+=tmp;
+  tmp=dati[INDICET1];
+  tmp=tmp<<8;
+  tt+=tmp;
+  tmp=dati[INDICET0];
+  tt+=tmp;
+  return tt;
+}
 
+void Messaggio::SetTime(unsigned long dt) {
+  dati[INDICET3]=dt >> 24;
+  dati[INDICET2]=(dt >> 16) & 0xFF;
+  dati[INDICET1]=(dt >> 8) & 0xFF;
+  dati[INDICET0]=(dt) & 0xFF;
+}
+
+Messaggio::PrendiDaRadio(RFM69 *r) {
+  destinatario=r->TARGETID;
+  mittente=r->SENDERID;
+  for(byte k=0;k<r->DATALEN;k++) dati[k]=r->DATA[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=r->DATALEN-INDICEINIZIODATI;
+}
+Messaggio::PrendiDaPkt(Messaggio m) {
+  destinatario=m.destinatario;
+  mittente=m.mittente;
+  for(byte k=0;k<m.lunghezza+INDICEINIZIODATI;k++) dati[k]=m.dati[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=m.lunghezza;
+}
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
+
+Messaggio m;
+Nodo* bestn[MAXBESTNEIGHBOURS];
 
 
 unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon,TLastPoll;
@@ -53,7 +147,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 6"));
+  Serial.println(F("Slave - Firmware: psr1"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -67,6 +161,7 @@ void setup() {
   stato=ZERO;
   Serial.println(F("STATO0")); 
   TrxSync=0;
+  for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
 }
 
 // algoritmo 1
@@ -74,7 +169,9 @@ void loop() {
   static unsigned long int tckradio=0;
   if(Serial.available()) ProcessaDatiSeriali();
   ElaboraPulsante();
-  ElaboraRadio();
+  if(radio.receiveDone()) ElaboraDatiRadio();
+  // motore trasmissione 
+  if(m.txincorso) tx2();  
   // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
   if((micros()-TLastPoll)>TIMEOUTVOTO) {
     if (stato!=ZERO) {
@@ -90,21 +187,154 @@ void loop() {
   }
 }
 
-// algoritmo 2
-void ElaboraRadio() {
-  if(!radio.receiveDone()) return;
-  switch(radio.DATA[0]) {
-    case 's':
-        ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
-        break;
-    case 'p':
-        ElaboraPoll(); // cmd p
-        break;
-    case 'd':
-        ElaboraCmdDiscovery(); // cmd d
-        break;
+bool tx(byte destinatario, char *dati, byte lunghezza) {
+  if(m.txincorso) {
+    Serial.println(F("tx busy"));
+    return false;
+  }
+  Serial.println(F("tx"));
+  m.mittente=indirizzo;
+  m.dati[INDICEDESTINATARIOFINALE]=destinatario;
+  m.dati[INDICEMITTENTEINIZIALE]=indirizzo;
+  m.dati[INDICEH1]=0;
+  m.dati[INDICEH2]=0;
+  m.dati[INDICEH3]=0;
+  m.txincorso=true;
+  m.tstart=micros();
+  m.SetTime(0);
+  m.tentativo=0;
+  m.lunghezza=lunghezza;
+  for(byte i=0;i<lunghezza;i++) m.dati[INDICEINIZIODATI+i]=dati[i];
+  return true;
+}
+
+// richiamata continuamente finché c'è una trasmissione in corso
+void tx2() {
+  // dal secondo tentativo aspetta il timeout
+  if( (m.tentativo>0) && ((millis() - m.tultimotentativo) < TEMPOTRATENTATIVI)) return;
+  if (m.tentativo<2) m.destinatario=m.dati[INDICEDESTINATARIOFINALE]; 
+  else m.destinatario=bestn[m.tentativo % MAXBESTNEIGHBOURS]->indirizzo;
+  if(m.tentativo++==10) {m.txincorso=false; return;}  
+  if(m.destinatario==m.dati[INDICEMITTENTEINIZIALE]) return;
+  if(m.destinatario==m.dati[INDICEH1]) return;
+  if(m.destinatario==m.dati[INDICEH2]) return;
+  if(m.destinatario==m.dati[INDICEH3]) return;
+  // se i 3 salti sono completi è possibile mandare solo al destinatario finale
+  if(m.destinatario!=m.dati[INDICEDESTINATARIOFINALE] && m.dati[INDICEH3]!=0) return;
+  if(m.destinatario==255) return;
+  Serial.print(F("tx2: tentativo/dest "));
+  Serial.print(m.tentativo);
+  Serial.print(" ");
+  Serial.println(m.destinatario);
+  txf();
+}
+
+// effettua la trasmissione del frame se il canale è libero
+void txf() {
+  Serial.print(F("txf: dest/len/dt "));
+  unsigned long dt=(micros()-m.tstart);
+  m.SetTime(m.GetTime()+dt);
+  m.tultimotentativo=millis();
+  m.print();
+
+  radio.send(m.destinatario, m.dati, m.lunghezza+INDICEINIZIODATI, true);
+}
+
+void ElaboraDatiRadio() {
+  Messaggio rxm;
+  //=new Messaggio();
+  rxm.PrendiDaRadio(&radio);
+  Serial.print(F("dati radio: "));
+  rxm.print();
+  
+  /*
+  Serial.print(radio.SENDERID);
+  Serial.print(" ");
+  Serial.print(radio.TARGETID);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEMITTENTEINIZIALE]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEDESTINATARIOFINALE]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEH1]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEH2]);
+  Serial.print(" ");
+  Serial.print(radio.DATA[INDICEH3]);
+  Serial.print(" ");
+  Serial.println(radio.RSSI);
+  */
+  CostruisciListaNodi();
+
+  // se non è roba per me buttalo
+  if(radio.TARGETID!=indirizzo) return;
+  
+  // ack indirizzato a me
+  if(m.txincorso && radio.ACK_RECEIVED) {
+    m.txincorso=false;
+    Serial.println("tx completed");
+    return;
+  }
+  // mio pacchetto non ack
+  if(radio.DATA[INDICEDESTINATARIOFINALE]==indirizzo) {
+    if(radio.ACKRequested()) {
+      radio.sendACK(0,0);
+      switch(rxm.dati[INDICEINIZIODATI]) {
+        case 's':
+            ElaboraCmdInvioSync(rxm.dati[INDICEINIZIODATI+1],rxm.dati[INDICEINIZIODATI+2],rxm.dati[INDICEINIZIODATI+3],rxm.dati[INDICEINIZIODATI+4]); // cmd s
+            break;
+        case 'p':
+            ElaboraPoll(); // cmd p
+            break;
+        case 'd':
+            ElaboraCmdDiscovery(); // cmd d
+            break;
+      }
+      return;
+    }
+    
+  }
+
+  // pkt indirizzato a me ma con destinatario finale diverso = da ritrasmettere
+  if (radio.DATA[INDICEDESTINATARIOFINALE]!=indirizzo) {
+    // è un pacchetto da ritrasmettere
+    // se ho già un okt in corso di trasmissione non do l'ack e lo butto
+    if(!m.txincorso) {
+      if(radio.ACKRequested()) radio.sendACK(0,0);
+      Serial.println(F("pkt da ritrasm"));
+      m.PrendiDaPkt(rxm);
+      m.txincorso=true;
+      m.mittente=indirizzo;
+      for(byte h=0;h<3;h++) if(m.dati[INDICEH1+h]==255) {m.dati[INDICEH1+h]=indirizzo; break;}
+      m.print();
+
+    }
   }
 }
+
+void CostruisciListaNodi() {
+  if(radio.SENDERID!=MASTER) {
+    // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
+    bool giainlista=false;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==radio.SENDERID) {bestn[i]->segnale=radio.RSSI; giainlista=true;}
+    if(!giainlista) {
+      int minimo=bestn[0]->segnale;
+      byte indicemin=0;
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+      if(radio.RSSI>minimo) {bestn[indicemin]->segnale=radio.RSSI; bestn[indicemin]->indirizzo=radio.SENDERID;}
+    }
+      
+    Serial.print(F("bestn: "));
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+      Serial.print(bestn[i]->indirizzo);
+      Serial.print(" ");
+      Serial.println(bestn[i]->segnale);
+      
+    }
+  }
+  
+}
+
 
 // algoritmo 3
 void ElaboraPulsante() {
@@ -120,33 +350,32 @@ void ElaboraPulsante() {
 }
 
 // algoritmo 4
-void ElaboraCmdInvioSync(byte * pkt) {
+void ElaboraCmdInvioSync(byte b3,byte b2,byte b1,byte b0) {
   unsigned long t;
   TrxSync=micros();
   TLastPoll=TrxSync;
   //stampapkt(pkt, 5);
   // estrae l'informazione dal pacchetto
-  t=radio.DATA[1];
+  t=b3;
   t=t<<24;
   TdaInizioVoto=t;
-  t=radio.DATA[2];
+  t=b2;
   t=t<<16;
   TdaInizioVoto+=t;
-  t=radio.DATA[3];
+  t=b1;
   t=t<<8;
   TdaInizioVoto+=t;
-  TdaInizioVoto+=radio.DATA[4];
-  if(!radio.send(MASTER, "k", 1,false)) {
-    radioSetup();
-  }
-  pulsantegiapremuto=false;
-  impostaled(500,500); //1 Hz Dc=50%
-  Tvoto=0;
-  stato=SINCRONIZZATO;
-  Serial.print(F("SINCRONIZZATO trxsync="));
-  Serial.print(TrxSync);
-  Serial.print(" tdainiziov=");
-  Serial.println(TdaInizioVoto);
+  TdaInizioVoto+=b0;
+  if(tx(MASTER, "k", 1)) {
+    pulsantegiapremuto=false;
+    impostaled(500,500); //1 Hz Dc=50%
+    Tvoto=0;
+    stato=SINCRONIZZATO;
+    Serial.print(F("SINCRONIZZATO trxsync="));
+    Serial.print(TrxSync);
+    Serial.print(" tdainiziov=");
+    Serial.println(TdaInizioVoto);
+ }
 }
 
 // algoritmo 5
@@ -155,17 +384,13 @@ void ElaboraCmdDiscovery() {
   pkt[0]='e';
   pkt[1]=(analogRead(PINBATTERIA)>>2);
   pkt[2]=radio.RSSI;
-  if(!radio.send(MASTER, pkt, 3,false)) {
-    radioSetup();
-    return;
-  }
-  impostaled(30,70);
-  Serial.print("ElaboraCmdDiscovery: VBatt=");
-  Serial.print(pkt[1]);
-  Serial.print(" RSSI=");
-  Serial.println(pkt[2]);
-  //stampapkt(pkt, 3);
-    
+  if(tx(MASTER, pkt, 3)) {
+    impostaled(30,70);
+    Serial.print("ElaboraCmdDiscovery: VBatt=");
+    Serial.print(pkt[1]);
+    Serial.print(" RSSI=");
+    Serial.println(pkt[2]);
+  }    
 }  
  
 
@@ -193,7 +418,7 @@ void ElaboraPoll() {
       pl=1;
       break;
   }
-  if(!radio.send(MASTER, pkt, pl,false)) radioSetup();
+  tx(MASTER, pkt, pl);
   TLastPoll=micros();
   //stampapkt(pkt, 3);
 }
