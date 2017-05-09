@@ -61,7 +61,13 @@ Display::Print(char* s) {
 
 byte numero_votati,indirizzo_slave_discovery;
 byte numero_slave;
-
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
 
 class Slave {
   public:
@@ -149,6 +155,8 @@ Stato stato;
 RFM69 radio(RFM69_CS,RFM69_IRQ,true,RFM69_IRQN);
 byte numero_max_slave;
 unsigned long t_inizio_voto;
+#define MAXBESTNEIGHBOURS 5
+Nodo* bestn[MAXBESTNEIGHBOURS];
 //LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
 
@@ -161,7 +169,7 @@ void setup() {
   digitalWrite(LEDROSSO, HIGH);
   digitalWrite(LEDBLU, LOW);
   
-  Serial.begin(9600);
+  Serial.begin(250000);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -195,6 +203,7 @@ void setup() {
   tft.println(F("Click corto: Voto"));
   tft.println(F("Effettuare il Discovery"));
   tft.println();
+  for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
   stato.setStato(ZERO);
 
 
@@ -208,6 +217,27 @@ void loop() {
       digitalWrite(LEDBLU, LOW);
   ElaboraPulsante();
   ElaboraStato();
+}
+
+void CostruisciListaNodi(byte ind, int sign) {
+    // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
+    bool giainlista=false;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==ind) {bestn[i]->segnale=sign; giainlista=true;}
+    if(!giainlista) {
+      int minimo=bestn[0]->segnale;
+      byte indicemin=0;
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+      if(sign>minimo) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;}
+    }
+      
+    Serial.print(F("bestn: "));
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+      Serial.print(bestn[i]->indirizzo);
+      Serial.print(" ");
+      Serial.println(bestn[i]->segnale);
+      
+    }
+  
 }
 
 void ProcessaDatiSeriali() {
@@ -585,31 +615,34 @@ void AggiornaDisplayKo() {
 
 //algoritmo 15
 bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byte *rssimaster) {
-  byte pkt[1];
-  pkt[0]='d';
-  for(int i=0;i<10;i++) {
-    //Serial.print("tento:");
-    //Serial.println(indirizzo);
-    //radio.send(indirizzo,pkt,1,false);
-    if (!radio.send(indirizzo,pkt,1,false)) {
-      radioSetup();
-      Serial.println(F("e parametro errato")); 
-      tft.println(F("radio send failed"));
-      return false;
-    }
+  byte pkt[2],dest;
+  pkt[0]=indirizzo;
+  pkt[1]='d';
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+     if (!radio.send(dest,pkt,2,false)) {
+        radioSetup();
+        return false;
+      }
 
     unsigned long sentTime = millis();
     while (millis() - sentTime < 20) {
       if(radio.receiveDone()) {
         //stampapkt(radio.DATA,radio.PAYLOADLEN);
-        if(radio.DATA[0]=='e') {
-          *livbatt=radio.DATA[1];
-          *rssislave=radio.DATA[2];
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        if(radio.DATA[1]=='e') {
+          *livbatt=radio.DATA[2];
+          *rssislave=radio.DATA[3];
           *rssimaster=radio.RSSI;
           return true;
         }
       }
     }
+    tent++;
+    if(tent==6) break;
+    
   }
   return false;
 }

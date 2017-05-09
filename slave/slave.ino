@@ -1,13 +1,7 @@
 /*
- * ver 3
- * led acceso prima possibile
- * test send fail su discovery, poll e inviosync
- * ver 4
- * introdotto TLastPolll e sincronizzato
- * risponde r al poll se ha perso il sync e il master lo segnalerà come non funzionante
- * 
- * ver 6
- * allungato a 6 min il timeout voto
+ * polling 3
+ * lo slave risponde al master se interrogato da questo
+ * oppure risponde al nodo intermedio se la richiesta è passata da questo
  */
 #include <RFM69.h>
 #include <EEPROM.h>
@@ -41,6 +35,7 @@ unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon,TLastPoll;
 bool pulsantegiapremuto;
 int stato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
 byte indirizzo;
+byte nodo; // indirizzo del nodo dal quale riceve il messaggio 
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
 void setup() {
@@ -53,7 +48,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 6"));
+  Serial.println(F("Slave - Firmware: p3.1"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -93,17 +88,31 @@ void loop() {
 // algoritmo 2
 void ElaboraRadio() {
   if(!radio.receiveDone()) return;
-  switch(radio.DATA[0]) {
-    case 's':
-        ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
-        break;
-    case 'p':
-        ElaboraPoll(); // cmd p
-        break;
-    case 'd':
-        ElaboraCmdDiscovery(); // cmd d
-        break;
-  }
+  nodo=radio.SENDERID;
+  byte destinatario=radio.DATA[0];
+  Serial.print(F("pkt da: ")); 
+  Serial.print(nodo); 
+  Serial.print(" a ");
+  Serial.println(destinatario);
+  if(destinatario==indirizzo) {
+    switch(radio.DATA[1]) {
+      case 's':
+          ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
+          break;
+      case 'p':
+          ElaboraPoll(); // cmd p
+          break;
+      case 'd':
+          ElaboraCmdDiscovery(); // cmd d
+          break;
+    }
+  } else {
+      Serial.println(F("pkt da ritrasmettere"));     
+      if(!radio.send(destinatario, radio.DATA, radio.DATALEN,false)) {
+        radioSetup();
+        return;
+      }
+    }
 }
 
 // algoritmo 3
@@ -136,7 +145,9 @@ void ElaboraCmdInvioSync(byte * pkt) {
   t=t<<8;
   TdaInizioVoto+=t;
   TdaInizioVoto+=radio.DATA[4];
-  if(!radio.send(MASTER, "k", 1,false)) {
+  byte rpkt[2];
+  rpkt[0]=1;rpkt[1]='k';
+  if(!radio.send(nodo, rpkt, 2,false)) {
     radioSetup();
   }
   pulsantegiapremuto=false;
@@ -152,10 +163,11 @@ void ElaboraCmdInvioSync(byte * pkt) {
 // algoritmo 5
 void ElaboraCmdDiscovery() {
   byte pkt[4];
-  pkt[0]='e';
-  pkt[1]=(analogRead(PINBATTERIA)>>2);
-  pkt[2]=radio.RSSI;
-  if(!radio.send(MASTER, pkt, 3,false)) {
+  pkt[0]=1;
+  pkt[1]='e';
+  pkt[2]=(analogRead(PINBATTERIA)>>2);
+  pkt[3]=radio.RSSI;
+  if(!radio.send(nodo, pkt, 4,false)) {
     radioSetup();
     return;
   }
@@ -170,30 +182,33 @@ void ElaboraCmdDiscovery() {
  
 
 void ElaboraPoll() {
-  byte pkt[5];
+  byte pkt[6];
   byte pl;
   switch (stato)
   {
     case VOTATO:
-      pkt[0]='q';
-      pkt[1]=Tvoto >> 24;
-      pkt[2]=(Tvoto >> 16) & 0xFF;
-      pkt[3]=(Tvoto >> 8) & 0xFF;
-      pkt[4]=(Tvoto) & 0xFF;
-      pl=5;
+      pkt[0]=1;
+      pkt[1]='q';
+      pkt[2]=Tvoto >> 24;
+      pkt[3]=(Tvoto >> 16) & 0xFF;
+      pkt[4]=(Tvoto >> 8) & 0xFF;
+      pkt[5]=(Tvoto) & 0xFF;
+      pl=6;
       break;
     case ZERO: 
-      // fuori sync   
-      pkt[0]='r';
-      pl=1;
+      // fuori sync
+      pkt[0]=1;
+      pkt[1]='r';
+      pl=2;
       break;
     case SINCRONIZZATO:    
       // sincronizzato ok ma non ancora votato
-      pkt[0]='t';
-      pl=1;
+      pkt[0]=1;
+      pkt[1]='t';
+      pl=2;
       break;
   }
-  if(!radio.send(MASTER, pkt, pl,false)) radioSetup();
+  if(!radio.send(nodo, pkt, pl,false)) radioSetup();
   TLastPoll=micros();
   //stampapkt(pkt, 3);
 }
