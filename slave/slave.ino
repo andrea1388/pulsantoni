@@ -3,8 +3,44 @@
  * Sistema polling con slave repeaters
  * versione iniziale psr1
  */
+
 #include <RFM69.h>
 #include <EEPROM.h>
+
+
+class Messaggio {
+  public:
+    unsigned long tstart,tultimotentativo;
+    byte destinatario,mittente;
+    byte lunghezza;
+    byte dati[19];
+    byte tentativo;
+    bool txincorso;
+    bool isack;
+    PrendiDaRadio(RFM69*);
+    PrendiDaPkt(Messaggio);
+    //Messaggio();
+    unsigned long GetTime();
+    void SetTime(unsigned long);
+    void print();
+    
+    
+};
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+
+
+
+
+
+
+
+
+
 
 #define INDICEMITTENTEINIZIALE 0
 #define INDICEDESTINATARIOFINALE 1
@@ -43,89 +79,8 @@
 #define SINCRONIZZATO 1
 #define VOTATO 2
 
-class Messaggio {
-  public:
-    unsigned long tstart,tultimotentativo;
-    byte destinatario,mittente;
-    byte lunghezza;
-    byte dati[19];
-    byte tentativo;
-    bool txincorso;
-    PrendiDaRadio(RFM69*);
-    PrendiDaPkt(Messaggio);
-    //Messaggio();
-    unsigned long GetTime();
-    void SetTime(unsigned long);
-    void print();
-    
-    
-};
-void Messaggio::print() {
-  Serial.print(F("msg: mitt/dest/orig/finale/h1/h2/h3/t/len/dati "));
-  Serial.print(mittente);
-  Serial.print("/");
-  Serial.print(destinatario);
-  Serial.print("/");
-  Serial.print(dati[INDICEMITTENTEINIZIALE]);
-  Serial.print("/");
-  Serial.print(dati[INDICEDESTINATARIOFINALE]);
-  Serial.print("/");
-  for(byte k=0;k<3;k++) {Serial.print(dati[INDICEH1+k]); Serial.print("/");}
-  Serial.print(GetTime());
-  Serial.print("/");
-  Serial.print(lunghezza);
-  Serial.print("/");
-  for(byte k=0;k<lunghezza;k++) {Serial.print(dati[INDICEINIZIODATI+k],HEX);}
-  Serial.println("");
-}
-unsigned long Messaggio::GetTime() {
-  unsigned long tt,tmp;
-  tmp=dati[INDICET3];
-  tmp=tmp<<24;
-  tt=tmp;
-  tmp=dati[INDICET2];
-  tmp=tmp<<16;
-  tt+=tmp;
-  tmp=dati[INDICET1];
-  tmp=tmp<<8;
-  tt+=tmp;
-  tmp=dati[INDICET0];
-  tt+=tmp;
-  return tt;
-}
+class Messaggio;
 
-void Messaggio::SetTime(unsigned long dt) {
-  dati[INDICET3]=dt >> 24;
-  dati[INDICET2]=(dt >> 16) & 0xFF;
-  dati[INDICET1]=(dt >> 8) & 0xFF;
-  dati[INDICET0]=(dt) & 0xFF;
-}
-
-Messaggio::PrendiDaRadio(RFM69 *r) {
-  destinatario=r->TARGETID;
-  mittente=r->SENDERID;
-  for(byte k=0;k<r->DATALEN;k++) dati[k]=r->DATA[k];
-  txincorso=true;
-  tstart=micros();
-  tentativo=0;
-  lunghezza=r->DATALEN-INDICEINIZIODATI;
-}
-Messaggio::PrendiDaPkt(Messaggio m) {
-  destinatario=m.destinatario;
-  mittente=m.mittente;
-  for(byte k=0;k<m.lunghezza+INDICEINIZIODATI;k++) dati[k]=m.dati[k];
-  txincorso=true;
-  tstart=micros();
-  tentativo=0;
-  lunghezza=m.lunghezza;
-}
-class Nodo {
-  public:
-    byte indirizzo;
-    int16_t segnale;
-    Nodo();
-};
-Nodo::Nodo() { indirizzo=255; segnale=-200;}
 
 Messaggio m;
 Nodo* bestn[MAXBESTNEIGHBOURS];
@@ -187,58 +142,9 @@ void loop() {
   }
 }
 
-bool tx(byte destinatario, char *dati, byte lunghezza) {
-  if(m.txincorso) {
-    Serial.println(F("tx busy"));
-    return false;
-  }
-  Serial.println(F("tx"));
-  m.mittente=indirizzo;
-  m.dati[INDICEDESTINATARIOFINALE]=destinatario;
-  m.dati[INDICEMITTENTEINIZIALE]=indirizzo;
-  m.dati[INDICEH1]=0;
-  m.dati[INDICEH2]=0;
-  m.dati[INDICEH3]=0;
-  m.txincorso=true;
-  m.tstart=micros();
-  m.SetTime(0);
-  m.tentativo=0;
-  m.lunghezza=lunghezza;
-  for(byte i=0;i<lunghezza;i++) m.dati[INDICEINIZIODATI+i]=dati[i];
-  return true;
-}
 
-// richiamata continuamente finché c'è una trasmissione in corso
-void tx2() {
-  // dal secondo tentativo aspetta il timeout
-  if( (m.tentativo>0) && ((millis() - m.tultimotentativo) < TEMPOTRATENTATIVI)) return;
-  if (m.tentativo<2) m.destinatario=m.dati[INDICEDESTINATARIOFINALE]; 
-  else m.destinatario=bestn[m.tentativo % MAXBESTNEIGHBOURS]->indirizzo;
-  if(m.tentativo++==10) {m.txincorso=false; return;}  
-  if(m.destinatario==m.dati[INDICEMITTENTEINIZIALE]) return;
-  if(m.destinatario==m.dati[INDICEH1]) return;
-  if(m.destinatario==m.dati[INDICEH2]) return;
-  if(m.destinatario==m.dati[INDICEH3]) return;
-  // se i 3 salti sono completi è possibile mandare solo al destinatario finale
-  if(m.destinatario!=m.dati[INDICEDESTINATARIOFINALE] && m.dati[INDICEH3]!=0) return;
-  if(m.destinatario==255) return;
-  Serial.print(F("tx2: tentativo/dest "));
-  Serial.print(m.tentativo);
-  Serial.print(" ");
-  Serial.println(m.destinatario);
-  txf();
-}
 
-// effettua la trasmissione del frame se il canale è libero
-void txf() {
-  Serial.print(F("txf: dest/len/dt "));
-  unsigned long dt=(micros()-m.tstart);
-  m.SetTime(m.GetTime()+dt);
-  m.tultimotentativo=millis();
-  m.print();
 
-  radio.send(m.destinatario, m.dati, m.lunghezza+INDICEINIZIODATI, true);
-}
 
 void ElaboraDatiRadio() {
   Messaggio rxm;
@@ -554,3 +460,139 @@ void stampapkt(byte *pkt,int len) {
   Serial.println();
     
 }
+
+// motore rtx
+bool tx(byte destinatario, char *dati, byte lunghezza) {
+  if(m.txincorso) {
+    Serial.println(F("tx busy"));
+    return false;
+  }
+  Serial.print(F("tx: dest: "));
+  Serial.println(destinatario);
+  m.mittente=indirizzo;
+  m.dati[INDICEDESTINATARIOFINALE]=destinatario;
+  m.dati[INDICEMITTENTEINIZIALE]=indirizzo;
+  m.dati[INDICEH1]=255;
+  m.dati[INDICEH2]=255;
+  m.dati[INDICEH3]=255;
+  m.txincorso=true;
+  m.tstart=micros();
+  m.SetTime(0);
+  m.tentativo=0;
+  m.lunghezza=lunghezza;
+  for(byte i=0;i<lunghezza;i++) m.dati[INDICEINIZIODATI+i]=dati[i];
+  return true;
+}
+
+
+// richiamata continuamente finché c'è una trasmissione in corso
+void tx2() {
+  // dal secondo tentativo aspetta il timeout
+  if( (m.tentativo>0) && ((millis() - m.tultimotentativo) < TEMPOTRATENTATIVI)) return;
+  if(m.tentativo++==10) {
+    m.txincorso=false; 
+    Serial.println(F("trasmissione fallita")); 
+    return;
+  }  
+  if (m.tentativo<3) m.destinatario=m.dati[INDICEDESTINATARIOFINALE]; 
+  else m.destinatario=bestn[(m.tentativo-3) % MAXBESTNEIGHBOURS]->indirizzo;
+  if(m.destinatario==m.dati[INDICEMITTENTEINIZIALE]) return;
+  if(m.destinatario==m.dati[INDICEH1]) return;
+  if(m.destinatario==m.dati[INDICEH2]) return;
+  if(m.destinatario==m.dati[INDICEH3]) return;
+  // se i 3 salti sono completi è possibile mandare solo al destinatario finale
+  if(m.destinatario!=m.dati[INDICEDESTINATARIOFINALE] && m.dati[INDICEH3]!=255) return;
+  // nodo fittizzio
+  if(m.destinatario==255) return;
+  Serial.print(F("tx2: tentativo/dest "));
+  Serial.print(m.tentativo);
+  Serial.print(" ");
+  Serial.println(m.destinatario);
+  txf();
+}
+
+// effettua la trasmissione del frame se il canale è libero
+void txf() {
+  Serial.print(F("txf: dest/len/dt "));
+  unsigned long dt=(micros()-m.tstart);
+  m.SetTime(m.GetTime()+dt);
+  m.tultimotentativo=millis();
+  m.print();
+
+  radio.send(m.destinatario, m.dati, m.lunghezza+INDICEINIZIODATI, true);
+}
+
+
+void Messaggio::print() {
+  if(isack) {
+     Serial.print(F("msgACK: mitt/dest "));
+     Serial.print(mittente);
+     Serial.print("/");
+     Serial.print(destinatario);
+     return;   
+  }
+  Serial.print(F("msg: mitt/dest/orig/finale/h1/h2/h3/t/len/dati "));
+  Serial.print(mittente);
+  Serial.print("/");
+  Serial.print(destinatario);
+  Serial.print("/");
+  Serial.print(dati[INDICEMITTENTEINIZIALE]);
+  Serial.print("/");
+  Serial.print(dati[INDICEDESTINATARIOFINALE]);
+  Serial.print("/");
+  for(byte k=0;k<3;k++) {Serial.print(dati[INDICEH1+k]); Serial.print("/");}
+  Serial.print(GetTime());
+  Serial.print("/");
+  Serial.print(lunghezza);
+  Serial.print("/");
+  for(byte k=0;k<lunghezza;k++) {Serial.print(dati[INDICEINIZIODATI+k],HEX);}
+  Serial.println("");
+}
+unsigned long Messaggio::GetTime() {
+  unsigned long tt,tmp;
+  tmp=dati[INDICET3];
+  tmp=tmp<<24;
+  tt=tmp;
+  tmp=dati[INDICET2];
+  tmp=tmp<<16;
+  tt+=tmp;
+  tmp=dati[INDICET1];
+  tmp=tmp<<8;
+  tt+=tmp;
+  tmp=dati[INDICET0];
+  tt+=tmp;
+  return tt;
+}
+
+void Messaggio::SetTime(unsigned long dt) {
+  dati[INDICET3]=dt >> 24;
+  dati[INDICET2]=(dt >> 16) & 0xFF;
+  dati[INDICET1]=(dt >> 8) & 0xFF;
+  dati[INDICET0]=(dt) & 0xFF;
+}
+
+Messaggio::PrendiDaRadio(RFM69 *r) {
+  destinatario=r->TARGETID;
+  mittente=r->SENDERID;
+  isack=r->ACK_RECEIVED;
+  for(byte k=0;k<r->DATALEN;k++) dati[k]=r->DATA[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=r->DATALEN-INDICEINIZIODATI;
+}
+Messaggio::PrendiDaPkt(Messaggio m) {
+  isack=m.isack;
+  destinatario=m.destinatario;
+  mittente=m.mittente;
+  for(byte k=0;k<m.lunghezza+INDICEINIZIODATI;k++) dati[k]=m.dati[k];
+  txincorso=true;
+  tstart=micros();
+  tentativo=0;
+  lunghezza=m.lunghezza;
+}
+
+
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
+
+
