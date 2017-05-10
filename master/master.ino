@@ -516,7 +516,6 @@ void interrogaTuttiGliSlave() {
   byte statoslave;
   for(byte i=0;i<numero_slave;i++) {
     if(slave[i]->oravoto==0) {
-      ElaboraPulsante();
       if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto,&statoslave)) {
         slave[i]->fallimenti=0;
         if(!slave[i]->funzionante) {
@@ -627,8 +626,8 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
         radioSetup();
         return false;
       }
-
     unsigned long sentTime = millis();
+    delay(2);
     while (millis() - sentTime < 20) {
       if(radio.receiveDone()) {
         //stampapkt(radio.DATA,radio.PAYLOADLEN);
@@ -656,55 +655,68 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
   while(true) {
     if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
     if(dest==255) break;
-    if(dest!=indirizzo) Serial.println("******");
+    if(dest!=indirizzo) Serial.print("******"); 
     if (!radio.send(dest,pkt,2,false)) {
       radioSetup();
       return false;
     }
     unsigned long sentTime = millis();
-    while (millis() - sentTime < 20) {
+    while (millis() - sentTime < 100) {
+      ElaboraPulsante();
       if(radio.receiveDone()) {
-        //if(radio.SENDERID!=indirizzo) Serial.println("******************");
-        Serial.print(indirizzo);
+
+        Serial.print(F("rxframe: time/sender/target/dati: "));
+        Serial.print(micros());
         Serial.print("/");
-        Serial.println(radio.SENDERID);
-        //stampapkt(radio.DATA,radio.DATALEN);
+        Serial.print(radio.SENDERID);
+        Serial.print("/");
+        Serial.print(radio.TARGETID);
+        Serial.print("/D:");
+        for (uint8_t i = 0; i < radio.DATALEN; i++){
+            Serial.print(radio.DATA[i],HEX);
+          Serial.print("/");
+          
+        }
+        Serial.println("");
         CostruisciListaNodi(radio.SENDERID, radio.RSSI);
-        if(radio.DATA[1]=='q') {
-          unsigned long t;
-          t=radio.DATA[2];
-          t=t<<24;
-          *oravoto=t;
-          t=radio.DATA[3];
-          t=t<<16;
-          *oravoto+=t;
-          t=radio.DATA[4];
-          t=t<<8;
-          *oravoto+=t;
-          *oravoto+= radio.DATA[5];
-          *statoslave=VOTATO;
-          return true;
-        }
-        // se lo slave per qualche motivo ha perso il sync risponde r
-        // è da considerare non funzionante
-        // caso raro
-        if(radio.DATA[1]=='r') {
-          *oravoto=0;
-          *statoslave=FUORISYNC;
-          return true;
-        }
-        if(radio.DATA[1]=='t') {
-          *oravoto=0;
-          *statoslave=NONVOTATO;
-          return true;
+        if(radio.TARGETID==0) {
+          if(radio.DATA[1]=='q') {
+            unsigned long t;
+            t=radio.DATA[2];
+            t=t<<24;
+            *oravoto=t;
+            t=radio.DATA[3];
+            t=t<<16;
+            *oravoto+=t;
+            t=radio.DATA[4];
+            t=t<<8;
+            *oravoto+=t;
+            *oravoto+= radio.DATA[5];
+            *statoslave=VOTATO;
+            return true;
+          }
+          // se lo slave per qualche motivo ha perso il sync risponde r
+          // è da considerare non funzionante
+          // caso raro
+          if(radio.DATA[1]=='r') {
+            *oravoto=0;
+            *statoslave=FUORISYNC;
+            return true;
+          }
+          if(radio.DATA[1]=='t') {
+            *oravoto=0;
+            *statoslave=NONVOTATO;
+            return true;
+          }
+          
         }
       }
     }
     tent++;
-    Serial.print("ko");Serial.println(dest);
     if(tent==6) break;
     
   }
+  Serial.print("ko");
   return false;
 }
 
@@ -757,10 +769,11 @@ void radioSetup() {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening e no address filter
   radio.setFrequency(FREQUENCY);
   radio.setHighPower(); 
   radio.setPowerLevel(31);
+  radio.promiscuous(true);
 }
 
 

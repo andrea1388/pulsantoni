@@ -88,6 +88,23 @@ void loop() {
 // algoritmo 2
 void ElaboraRadio() {
   if(!radio.receiveDone()) return;
+  Serial.println("");
+  Serial.print(F("rxframe: time/sender/target/dati: "));
+  Serial.print(micros());
+  Serial.print("/");
+  Serial.print(radio.SENDERID);
+  Serial.print("/");
+  Serial.print(radio.TARGETID);
+  Serial.print("/D:");
+  for (uint8_t i = 0; i < radio.DATALEN; i++){
+      Serial.print(radio.DATA[i],HEX);
+    Serial.print("/");
+    
+  }
+  Serial.println("");
+
+  if(radio.TARGETID!=indirizzo) return;
+  
   nodo=radio.SENDERID;
   byte destinatario=radio.DATA[0];
   Serial.print(F("pkt da: ")); 
@@ -146,7 +163,7 @@ void ElaboraCmdInvioSync(byte * pkt) {
   TdaInizioVoto+=t;
   TdaInizioVoto+=radio.DATA[4];
   byte rpkt[2];
-  rpkt[0]=1;rpkt[1]='k';
+  rpkt[0]=0;rpkt[1]='k';
   if(!radio.send(nodo, rpkt, 2,false)) {
     radioSetup();
   }
@@ -163,7 +180,7 @@ void ElaboraCmdInvioSync(byte * pkt) {
 // algoritmo 5
 void ElaboraCmdDiscovery() {
   byte pkt[4];
-  pkt[0]=1;
+  pkt[0]=0;
   pkt[1]='e';
   pkt[2]=(analogRead(PINBATTERIA)>>2);
   pkt[3]=radio.RSSI;
@@ -187,7 +204,7 @@ void ElaboraPoll() {
   switch (stato)
   {
     case VOTATO:
-      pkt[0]=1;
+      pkt[0]=0;
       pkt[1]='q';
       pkt[2]=Tvoto >> 24;
       pkt[3]=(Tvoto >> 16) & 0xFF;
@@ -197,13 +214,13 @@ void ElaboraPoll() {
       break;
     case ZERO: 
       // fuori sync
-      pkt[0]=1;
+      pkt[0]=0;
       pkt[1]='r';
       pl=2;
       break;
     case SINCRONIZZATO:    
       // sincronizzato ok ma non ancora votato
-      pkt[0]=1;
+      pkt[0]=0;
       pkt[1]='t';
       pl=2;
       break;
@@ -331,6 +348,7 @@ void radioSetup() {
   radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
+  radio.promiscuous(false);
 }
 
 void stampapkt(byte *pkt,int len) {
