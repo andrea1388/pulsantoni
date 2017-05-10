@@ -229,7 +229,7 @@ void CostruisciListaNodi(byte ind, int sign) {
       for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
       if(sign>minimo) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;}
     }
-      
+    /*  
     Serial.print(F("bestn: "));
     for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
       Serial.print(bestn[i]->indirizzo);
@@ -237,6 +237,7 @@ void CostruisciListaNodi(byte ind, int sign) {
       Serial.println(bestn[i]->segnale);
       
     }
+    */
   
 }
 
@@ -579,7 +580,7 @@ void interrogaTuttiGliSlave() {
   
       } else {
         slave[i]->fallimenti++;
-        if(slave[i]->fallimenti>100) {
+        if(slave[i]->fallimenti>0) {
           if(slave[i]->fallimenti>250) slave[i]->fallimenti=250;
           /*
           Serial.print(slave[i]->indirizzo);
@@ -648,79 +649,95 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
 }
 
 bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslave) {
-  byte pkt[1];
-  pkt[0]='p';
-  if (!radio.send(indirizzo,pkt,1,false)) {
-    radioSetup();
-    return false;
-  }
-  Serial.print(indirizzo);
-  Serial.print(" : ");
-  unsigned long sentTime = millis();
-  while (millis() - sentTime < 10) {
-    if(radio.receiveDone()) {
-
-
-        if(indirizzo==10) {
-          Serial.println(radio.RSSI);
+  byte pkt[2],dest;
+  pkt[0]=indirizzo;
+  pkt[1]='p';
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+    if(dest!=indirizzo) Serial.println("******");
+    if (!radio.send(dest,pkt,2,false)) {
+      radioSetup();
+      return false;
+    }
+    unsigned long sentTime = millis();
+    while (millis() - sentTime < 20) {
+      if(radio.receiveDone()) {
+        //if(radio.SENDERID!=indirizzo) Serial.println("******************");
+        Serial.print(indirizzo);
+        Serial.print("/");
+        Serial.println(radio.SENDERID);
+        //stampapkt(radio.DATA,radio.DATALEN);
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        if(radio.DATA[1]=='q') {
+          unsigned long t;
+          t=radio.DATA[2];
+          t=t<<24;
+          *oravoto=t;
+          t=radio.DATA[3];
+          t=t<<16;
+          *oravoto+=t;
+          t=radio.DATA[4];
+          t=t<<8;
+          *oravoto+=t;
+          *oravoto+= radio.DATA[5];
+          *statoslave=VOTATO;
+          return true;
         }
-
-
-      
-      //stampapkt(radio.DATA,radio.PAYLOADLEN);
-      if(radio.DATA[0]=='q') {
-        unsigned long t;
-        t=radio.DATA[1];
-        t=t<<24;
-        *oravoto=t;
-        t=radio.DATA[2];
-        t=t<<16;
-        *oravoto+=t;
-        t=radio.DATA[3];
-        t=t<<8;
-        *oravoto+=t;
-        *oravoto+= radio.DATA[4];
-        *statoslave=VOTATO;
-        return true;
-      }
-      // se lo slave per qualche motivo ha perso il sync risponde r
-      // è da considerare non funzionante
-      // caso raro
-      if(radio.DATA[0]=='r') {
-        *oravoto=0;
-        *statoslave=FUORISYNC;
-        return true;
-      }
-      if(radio.DATA[0]=='t') {
-        *oravoto=0;
-        *statoslave=NONVOTATO;
-        return true;
+        // se lo slave per qualche motivo ha perso il sync risponde r
+        // è da considerare non funzionante
+        // caso raro
+        if(radio.DATA[1]=='r') {
+          *oravoto=0;
+          *statoslave=FUORISYNC;
+          return true;
+        }
+        if(radio.DATA[1]=='t') {
+          *oravoto=0;
+          *statoslave=NONVOTATO;
+          return true;
+        }
       }
     }
+    tent++;
+    Serial.print("ko");Serial.println(dest);
+    if(tent==6) break;
+    
   }
-          if(indirizzo==10) {
-          Serial.println("ko");
-        }
-
   return false;
 }
 
 //algoritmo 18
 bool TrasmettiPacchettoSync(byte indirizzo, unsigned long t_da_iniziovoto) {
-	char pkt[5];
-	pkt[0]='s';
-	pkt[1]=t_da_iniziovoto >> 24;
-	pkt[2]=(t_da_iniziovoto >> 16) & 0xFF;
-	pkt[3]=(t_da_iniziovoto >> 8) & 0xFF;
-	pkt[4]=(t_da_iniziovoto) & 0xFF;
-	radio.send(indirizzo, pkt, 5);
-  unsigned long sentTime = millis();
-  while (millis() - sentTime < 20) {
-    if(radio.receiveDone()) {
-      if(radio.DATA[0]=='k') {
-        return true;
+	char pkt[6],dest;
+	pkt[0]=indirizzo;
+  pkt[1]='s';
+	pkt[2]=t_da_iniziovoto >> 24;
+	pkt[3]=(t_da_iniziovoto >> 16) & 0xFF;
+	pkt[4]=(t_da_iniziovoto >> 8) & 0xFF;
+	pkt[5]=(t_da_iniziovoto) & 0xFF;
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+    if (!radio.send(dest,pkt,6,false)) {
+      radioSetup();
+      return false;
+    }
+    unsigned long sentTime = millis();
+    while (millis() - sentTime < 20) {
+      if(radio.receiveDone()) {
+        //stampapkt(radio.DATA,radio.PAYLOADLEN);
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        if(radio.DATA[1]=='k') {
+          return true;
+        }
       }
     }
+    tent++;
+    if(tent==6) break;
+    
   }
   return false;  
 }
