@@ -8,7 +8,7 @@
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
-#define TIMEOUTVOTO 360000000 // 360 sec = 6 min
+#define TIMEOUTVOTO 10000000 // 360 sec = 6 min
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
@@ -36,6 +36,7 @@ bool pulsantegiapremuto;
 int stato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
 byte indirizzo;
 byte nodo; // indirizzo del nodo dal quale riceve il messaggio 
+bool discovered;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
 
 void setup() {
@@ -48,7 +49,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: p3.1"));
+  Serial.println(F("Slave - Firmware: p3.4"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -62,6 +63,8 @@ void setup() {
   stato=ZERO;
   Serial.println(F("STATO0")); 
   TrxSync=0;
+  radio._printpackets=false;
+  discovered=false;
 }
 
 // algoritmo 1
@@ -72,6 +75,7 @@ void loop() {
   ElaboraRadio();
   // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
   if((micros()-TLastPoll)>TIMEOUTVOTO) {
+    if(discovered) {impostaled(100,2900); discovered=false;}
     if (stato!=ZERO) {
       stato=ZERO;
       impostaled(100,2900);
@@ -88,29 +92,10 @@ void loop() {
 // algoritmo 2
 void ElaboraRadio() {
   if(!radio.receiveDone()) return;
-  Serial.println("");
-  Serial.print(F("rxframe: time/sender/target/dati: "));
-  Serial.print(micros());
-  Serial.print("/");
-  Serial.print(radio.SENDERID);
-  Serial.print("/");
-  Serial.print(radio.TARGETID);
-  Serial.print("/D:");
-  for (uint8_t i = 0; i < radio.DATALEN; i++){
-      Serial.print(radio.DATA[i],HEX);
-    Serial.print("/");
-    
-  }
-  Serial.println("");
-
   if(radio.TARGETID!=indirizzo) return;
-  
   nodo=radio.SENDERID;
   byte destinatario=radio.DATA[0];
-  Serial.print(F("pkt da: ")); 
-  Serial.print(nodo); 
-  Serial.print(" a ");
-  Serial.println(destinatario);
+    delay(5);     
   if(destinatario==indirizzo) {
     switch(radio.DATA[1]) {
       case 's':
@@ -124,7 +109,7 @@ void ElaboraRadio() {
           break;
     }
   } else {
-      Serial.println(F("pkt da ritrasmettere"));     
+      if(radio._printpackets) Serial.println(F("pkt da ritrasmettere"));
       if(!radio.send(destinatario, radio.DATA, radio.DATALEN,false)) {
         radioSetup();
         return;
@@ -147,21 +132,22 @@ void ElaboraPulsante() {
 
 // algoritmo 4
 void ElaboraCmdInvioSync(byte * pkt) {
+  TLastPoll=micros();
   unsigned long t;
   TrxSync=micros();
   TLastPoll=TrxSync;
   //stampapkt(pkt, 5);
   // estrae l'informazione dal pacchetto
-  t=radio.DATA[1];
+  t=radio.DATA[2];
   t=t<<24;
   TdaInizioVoto=t;
-  t=radio.DATA[2];
+  t=radio.DATA[3];
   t=t<<16;
   TdaInizioVoto+=t;
-  t=radio.DATA[3];
+  t=radio.DATA[4];
   t=t<<8;
   TdaInizioVoto+=t;
-  TdaInizioVoto+=radio.DATA[4];
+  TdaInizioVoto+=radio.DATA[5];
   byte rpkt[2];
   rpkt[0]=0;rpkt[1]='k';
   if(!radio.send(nodo, rpkt, 2,false)) {
@@ -179,6 +165,8 @@ void ElaboraCmdInvioSync(byte * pkt) {
 
 // algoritmo 5
 void ElaboraCmdDiscovery() {
+  TLastPoll=micros();
+  discovered=true;
   byte pkt[4];
   pkt[0]=0;
   pkt[1]='e';
@@ -199,6 +187,7 @@ void ElaboraCmdDiscovery() {
  
 
 void ElaboraPoll() {
+  TLastPoll=micros();
   byte pkt[6];
   byte pl;
   switch (stato)
@@ -226,7 +215,6 @@ void ElaboraPoll() {
       break;
   }
   if(!radio.send(nodo, pkt, pl,false)) radioSetup();
-  TLastPoll=micros();
   //stampapkt(pkt, 3);
 }
 
@@ -296,7 +284,12 @@ void ProcessaDatiSeriali() {
           Serial.print(F("indirizzo memorizzato: "));
           Serial.println(ind);
         }
-      } else {
+      } else if(comando=='P') {
+          radio._printpackets=!radio._printpackets;
+          Serial.print(F("stampapacchetti: "));
+          Serial.println(radio._printpackets);
+      }
+      else {
         Serial.println(F("comando errato"));  
         Serial.println(radio.readReg(0x01),HEX);
         Serial.println(radio.readReg(0x27),HEX);

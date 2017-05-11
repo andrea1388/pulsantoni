@@ -205,6 +205,7 @@ void setup() {
   tft.println();
   for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
   stato.setStato(ZERO);
+  radio._printpackets=false;
 
 
 }
@@ -303,6 +304,12 @@ void ProcessaDatiSeriali() {
           // stampa il num max di client
           Serial.print(F("ns "));
           Serial.println(numero_max_slave);
+          break;
+        case 'P':
+          // stampa il num max di client
+          radio._printpackets=!radio._printpackets;
+          Serial.print(F("stampapacchetti: "));
+          Serial.println(radio._printpackets);
           break;
       }
       k=0;
@@ -655,16 +662,16 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
   while(true) {
     if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
     if(dest==255) break;
-    if(dest!=indirizzo) Serial.print("******"); 
+    if(dest!=indirizzo  && radio._printpackets) Serial.print("******"); 
     if (!radio.send(dest,pkt,2,false)) {
       radioSetup();
       return false;
     }
     unsigned long sentTime = millis();
-    while (millis() - sentTime < 100) {
+    while (millis() - sentTime < 50) {
       ElaboraPulsante();
       if(radio.receiveDone()) {
-
+        /*
         Serial.print(F("rxframe: time/sender/target/dati: "));
         Serial.print(micros());
         Serial.print("/");
@@ -678,6 +685,7 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
           
         }
         Serial.println("");
+        */
         CostruisciListaNodi(radio.SENDERID, radio.RSSI);
         if(radio.TARGETID==0) {
           if(radio.DATA[1]=='q') {
