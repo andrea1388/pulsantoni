@@ -28,6 +28,13 @@
 #define SINCRONIZZATO 1
 #define VOTATO 2
 
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
 
 
 
@@ -38,6 +45,8 @@ byte indirizzo;
 byte nodo; // indirizzo del nodo dal quale riceve il messaggio 
 bool discovered;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
+#define MAXBESTNEIGHBOURS 5
+Nodo* bestn[MAXBESTNEIGHBOURS];
 
 void setup() {
   // accende subito il led
@@ -49,7 +58,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: p3.4"));
+  Serial.println(F("Slave - Firmware: p3.5"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -65,6 +74,7 @@ void setup() {
   TrxSync=0;
   radio._printpackets=false;
   discovered=false;
+  for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
 }
 
 // algoritmo 1
@@ -92,6 +102,7 @@ void loop() {
 // algoritmo 2
 void ElaboraRadio() {
   if(!radio.receiveDone()) return;
+  CostruisciListaNodi(radio.SENDERID, radio.RSSI,radio.DATALEN,radio.DATA[0]);
   if(radio.TARGETID!=indirizzo) return;
   nodo=radio.SENDERID;
   byte destinatario=radio.DATA[0];
@@ -188,7 +199,7 @@ void ElaboraCmdDiscovery() {
 
 void ElaboraPoll() {
   TLastPoll=micros();
-  byte pkt[6];
+  byte pkt[7];
   byte pl;
   switch (stato)
   {
@@ -211,7 +222,12 @@ void ElaboraPoll() {
       // sincronizzato ok ma non ancora votato
       pkt[0]=0;
       pkt[1]='t';
-      pl=2;
+      pkt[2]=bestn[0]->indirizzo;
+      pkt[3]=bestn[1]->indirizzo;
+      pkt[4]=bestn[2]->indirizzo;
+      pkt[5]=bestn[3]->indirizzo;
+      pkt[6]=bestn[4]->indirizzo;
+      pl=7;
       break;
   }
   if(!radio.send(nodo, pkt, pl,false)) radioSetup();
@@ -337,21 +353,41 @@ void radioSetup() {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening e no address filter
   radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
-  radio.promiscuous(false);
+  radio.promiscuous(true);
 }
 
-void stampapkt(byte *pkt,int len) {
-  Serial.print("len:");
-  Serial.print(len);
-  Serial.print("pkt:");
-  for (int i=0;i<len;i++) {
-    Serial.print(pkt[i],HEX);
-    Serial.print(":");
-  }
-  Serial.println();
+
+void CostruisciListaNodi(byte ind, int sign, byte len, byte dest) {
+    // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
+    if(ind==0) return;
+    if(dest!=0) return;
+    if(len<2) return;
+    bool giainlista=false;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==ind) {bestn[i]->segnale=sign; giainlista=true;}
+    if(!giainlista) {
+      int minimo=bestn[0]->segnale;
+      byte indicemin=0;
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+      if(sign>minimo) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;}
+    }
+    Nodo *tmp;
+    for (int i=0;i<MAXBESTNEIGHBOURS-1;i++) 
+      for (int k=i+1;k<MAXBESTNEIGHBOURS;k++) 
+        if(bestn[i]->segnale<bestn[k]->segnale) {tmp=bestn[k]; bestn[k]=bestn[i]; bestn[i]=tmp;}
     
+    if(radio._printpackets) {
+      Serial.print(F("best: i/s "));
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+        Serial.print(bestn[i]->indirizzo);
+        Serial.print("/");
+        Serial.print(bestn[i]->segnale);
+        Serial.print(" ");
+        
+      }
+      Serial.println(" ");
+    }
 }
