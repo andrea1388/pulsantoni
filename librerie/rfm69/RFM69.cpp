@@ -307,6 +307,22 @@ bool RFM69::sendFrame(uint8_t toAddress, const void* buffer, uint8_t bufferSize,
   while (digitalRead(_interruptPin) == 0 && millis() - txStart < RF69_TX_LIMIT_MS); // wait for DIO0 to turn HIGH signalling transmission finish
   //while (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PACKETSENT == 0x00); // wait for ModeReady
   setMode(RF69_MODE_STANDBY);
+  if(_printpackets) {
+	  Serial.print(F("sendframe: time/sender/target/dati: "));
+	  Serial.print(micros());
+	  Serial.print("/");
+	  Serial.print(_address);
+	  Serial.print("/");
+	  Serial.print(toAddress);
+	  Serial.print("/D:");
+	  for (uint8_t i = 0; i < bufferSize; i++){
+	      Serial.print(((uint8_t*) buffer)[i],HEX);
+		  Serial.print("/");
+  	
+	  }
+	  Serial.println("");
+  }
+
   return true;
 }
 
@@ -351,7 +367,22 @@ void RFM69::interruptHandler() {
     setMode(RF69_MODE_RX);
   }
   RSSI = readRSSI();
-  //digitalWrite(4, 0);
+  if(_printpackets && PAYLOADLEN > 0) {
+	  Serial.print(F("rxframe: time/sender/target/dati: "));
+	  Serial.print(micros());
+	  Serial.print("/");
+	  Serial.print(SENDERID);
+	  Serial.print("/");
+	  Serial.print(TARGETID);
+	  Serial.print("/D:");
+	  for (uint8_t i = 0; i < DATALEN; i++){
+	      Serial.print(DATA[i],HEX);
+		  Serial.print("/");
+  	
+	  }
+	  Serial.println("");
+  }
+  
 }
 
 // internal function

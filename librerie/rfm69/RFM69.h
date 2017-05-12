@@ -84,6 +84,7 @@ class RFM69 {
     static volatile uint8_t ACK_RECEIVED; // should be polled immediately after sending a packet with ACK request
     static volatile int16_t RSSI; // most accurate RSSI during reception (closest to the reception)
     static volatile uint8_t _mode; // should be protected?
+	bool _printpackets;
 
     RFM69(uint8_t slaveSelectPin=RF69_SPI_CS, uint8_t interruptPin=RF69_IRQ_PIN, bool isRFM69HW=false, uint8_t interruptNum=RF69_IRQ_NUM) {
       _slaveSelectPin = slaveSelectPin;

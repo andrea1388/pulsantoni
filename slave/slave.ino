@@ -1,20 +1,14 @@
 /*
- * ver 3
- * led acceso prima possibile
- * test send fail su discovery, poll e inviosync
- * ver 4
- * introdotto TLastPolll e sincronizzato
- * risponde r al poll se ha perso il sync e il master lo segnalerà come non funzionante
- * 
- * ver 6
- * allungato a 6 min il timeout voto
+ * polling 3
+ * lo slave risponde al master se interrogato da questo
+ * oppure risponde al nodo intermedio se la richiesta è passata da questo
  */
 #include <RFM69.h>
 #include <EEPROM.h>
 
 #define pinPULSANTE 3
 #define PINBATTERIA 0 // per lettura tensione batteria 
-#define TIMEOUTVOTO 360000000 // 360 sec = 6 min
+#define TIMEOUTVOTO 10000000 // 360 sec = 6 min
 // parametri radio
 #define NETWORKID 27
 #define FREQUENCY 868000000
@@ -34,6 +28,13 @@
 #define SINCRONIZZATO 1
 #define VOTATO 2
 
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
 
 
 
@@ -41,7 +42,11 @@ unsigned long TdaInizioVoto,TrxSync,Tvoto, Tledoff, Tledon,TLastPoll;
 bool pulsantegiapremuto;
 int stato; // true dopo la sincronizzazione, false all'inizio, dopo il discovery e dopo il timeoutvoto
 byte indirizzo;
+byte nodo; // indirizzo del nodo dal quale riceve il messaggio 
+bool discovered;
 RFM69 radio=RFM69(RFM69_CS, RFM69_IRQ, true, RFM69_IRQN);
+#define MAXBESTNEIGHBOURS 5
+Nodo* bestn[MAXBESTNEIGHBOURS];
 
 void setup() {
   // accende subito il led
@@ -53,7 +58,7 @@ void setup() {
   indirizzo = EEPROM.read(0);
   // info su seriale
   Serial.begin(250000);
-  Serial.println(F("Slave - Firmware: 6"));
+  Serial.println(F("Slave - Firmware: p3.5"));
   Serial.print(F("Indirizzo: "));
   Serial.println(indirizzo);
   // imposta radio
@@ -67,6 +72,9 @@ void setup() {
   stato=ZERO;
   Serial.println(F("STATO0")); 
   TrxSync=0;
+  radio._printpackets=false;
+  discovered=false;
+  for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
 }
 
 // algoritmo 1
@@ -77,6 +85,7 @@ void loop() {
   ElaboraRadio();
   // dopo TIMEOUTVOTO reimposta un lampeggio lento per risparmiare batteria
   if((micros()-TLastPoll)>TIMEOUTVOTO) {
+    if(discovered) {impostaled(100,2900); discovered=false;}
     if (stato!=ZERO) {
       stato=ZERO;
       impostaled(100,2900);
@@ -93,17 +102,30 @@ void loop() {
 // algoritmo 2
 void ElaboraRadio() {
   if(!radio.receiveDone()) return;
-  switch(radio.DATA[0]) {
-    case 's':
-        ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
-        break;
-    case 'p':
-        ElaboraPoll(); // cmd p
-        break;
-    case 'd':
-        ElaboraCmdDiscovery(); // cmd d
-        break;
-  }
+  CostruisciListaNodi(radio.SENDERID, radio.RSSI,radio.DATALEN,radio.DATA[0]);
+  if(radio.TARGETID!=indirizzo) return;
+  nodo=radio.SENDERID;
+  byte destinatario=radio.DATA[0];
+    delay(5);     
+  if(destinatario==indirizzo) {
+    switch(radio.DATA[1]) {
+      case 's':
+          ElaboraCmdInvioSync((byte *)radio.DATA); // cmd s
+          break;
+      case 'p':
+          ElaboraPoll(); // cmd p
+          break;
+      case 'd':
+          ElaboraCmdDiscovery(); // cmd d
+          break;
+    }
+  } else {
+      if(radio._printpackets) Serial.println(F("pkt da ritrasmettere"));
+      if(!radio.send(destinatario, radio.DATA, radio.DATALEN,false)) {
+        radioSetup();
+        return;
+      }
+    }
 }
 
 // algoritmo 3
@@ -121,22 +143,25 @@ void ElaboraPulsante() {
 
 // algoritmo 4
 void ElaboraCmdInvioSync(byte * pkt) {
+  TLastPoll=micros();
   unsigned long t;
   TrxSync=micros();
   TLastPoll=TrxSync;
   //stampapkt(pkt, 5);
   // estrae l'informazione dal pacchetto
-  t=radio.DATA[1];
+  t=radio.DATA[2];
   t=t<<24;
   TdaInizioVoto=t;
-  t=radio.DATA[2];
+  t=radio.DATA[3];
   t=t<<16;
   TdaInizioVoto+=t;
-  t=radio.DATA[3];
+  t=radio.DATA[4];
   t=t<<8;
   TdaInizioVoto+=t;
-  TdaInizioVoto+=radio.DATA[4];
-  if(!radio.send(MASTER, "k", 1,false)) {
+  TdaInizioVoto+=radio.DATA[5];
+  byte rpkt[2];
+  rpkt[0]=0;rpkt[1]='k';
+  if(!radio.send(nodo, rpkt, 2,false)) {
     radioSetup();
   }
   pulsantegiapremuto=false;
@@ -151,11 +176,14 @@ void ElaboraCmdInvioSync(byte * pkt) {
 
 // algoritmo 5
 void ElaboraCmdDiscovery() {
+  TLastPoll=micros();
+  discovered=true;
   byte pkt[4];
-  pkt[0]='e';
-  pkt[1]=(analogRead(PINBATTERIA)>>2);
-  pkt[2]=radio.RSSI;
-  if(!radio.send(MASTER, pkt, 3,false)) {
+  pkt[0]=0;
+  pkt[1]='e';
+  pkt[2]=(analogRead(PINBATTERIA)>>2);
+  pkt[3]=radio.RSSI;
+  if(!radio.send(nodo, pkt, 4,false)) {
     radioSetup();
     return;
   }
@@ -170,31 +198,39 @@ void ElaboraCmdDiscovery() {
  
 
 void ElaboraPoll() {
-  byte pkt[5];
+  TLastPoll=micros();
+  byte pkt[7];
   byte pl;
   switch (stato)
   {
     case VOTATO:
-      pkt[0]='q';
-      pkt[1]=Tvoto >> 24;
-      pkt[2]=(Tvoto >> 16) & 0xFF;
-      pkt[3]=(Tvoto >> 8) & 0xFF;
-      pkt[4]=(Tvoto) & 0xFF;
-      pl=5;
+      pkt[0]=0;
+      pkt[1]='q';
+      pkt[2]=Tvoto >> 24;
+      pkt[3]=(Tvoto >> 16) & 0xFF;
+      pkt[4]=(Tvoto >> 8) & 0xFF;
+      pkt[5]=(Tvoto) & 0xFF;
+      pl=6;
       break;
     case ZERO: 
-      // fuori sync   
-      pkt[0]='r';
-      pl=1;
+      // fuori sync
+      pkt[0]=0;
+      pkt[1]='r';
+      pl=2;
       break;
     case SINCRONIZZATO:    
       // sincronizzato ok ma non ancora votato
-      pkt[0]='t';
-      pl=1;
+      pkt[0]=0;
+      pkt[1]='t';
+      pkt[2]=bestn[0]->indirizzo;
+      pkt[3]=bestn[1]->indirizzo;
+      pkt[4]=bestn[2]->indirizzo;
+      pkt[5]=bestn[3]->indirizzo;
+      pkt[6]=bestn[4]->indirizzo;
+      pl=7;
       break;
   }
-  if(!radio.send(MASTER, pkt, pl,false)) radioSetup();
-  TLastPoll=micros();
+  if(!radio.send(nodo, pkt, pl,false)) radioSetup();
   //stampapkt(pkt, 3);
 }
 
@@ -264,7 +300,12 @@ void ProcessaDatiSeriali() {
           Serial.print(F("indirizzo memorizzato: "));
           Serial.println(ind);
         }
-      } else {
+      } else if(comando=='P') {
+          radio._printpackets=!radio._printpackets;
+          Serial.print(F("stampapacchetti: "));
+          Serial.println(radio._printpackets);
+      }
+      else {
         Serial.println(F("comando errato"));  
         Serial.println(radio.readReg(0x01),HEX);
         Serial.println(radio.readReg(0x27),HEX);
@@ -312,20 +353,41 @@ void radioSetup() {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening e no address filter
   radio.setFrequency(FREQUENCY);
 	radio.setHighPower(); 
   radio.setPowerLevel(31);
+  radio.promiscuous(true);
 }
 
-void stampapkt(byte *pkt,int len) {
-  Serial.print("len:");
-  Serial.print(len);
-  Serial.print("pkt:");
-  for (int i=0;i<len;i++) {
-    Serial.print(pkt[i],HEX);
-    Serial.print(":");
-  }
-  Serial.println();
+
+void CostruisciListaNodi(byte ind, int sign, byte len, byte dest) {
+    // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
+    if(ind==0) return;
+    if(dest!=0) return;
+    if(len<2) return;
+    bool giainlista=false;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==ind) {bestn[i]->segnale=sign; giainlista=true;}
+    if(!giainlista) {
+      int minimo=bestn[0]->segnale;
+      byte indicemin=0;
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+      if(sign>minimo) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;}
+    }
+    Nodo *tmp;
+    for (int i=0;i<MAXBESTNEIGHBOURS-1;i++) 
+      for (int k=i+1;k<MAXBESTNEIGHBOURS;k++) 
+        if(bestn[i]->segnale<bestn[k]->segnale) {tmp=bestn[k]; bestn[k]=bestn[i]; bestn[i]=tmp;}
     
+    if(radio._printpackets) {
+      Serial.print(F("best: i/s "));
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+        Serial.print(bestn[i]->indirizzo);
+        Serial.print("/");
+        Serial.print(bestn[i]->segnale);
+        Serial.print(" ");
+        
+      }
+      Serial.println(" ");
+    }
 }

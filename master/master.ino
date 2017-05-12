@@ -61,7 +61,13 @@ Display::Print(char* s) {
 
 byte numero_votati,indirizzo_slave_discovery;
 byte numero_slave;
-
+class Nodo {
+  public:
+    byte indirizzo;
+    int16_t segnale;
+    Nodo();
+};
+Nodo::Nodo() { indirizzo=255; segnale=-200;}
 
 class Slave {
   public:
@@ -149,6 +155,8 @@ Stato stato;
 RFM69 radio(RFM69_CS,RFM69_IRQ,true,RFM69_IRQN);
 byte numero_max_slave;
 unsigned long t_inizio_voto;
+#define MAXBESTNEIGHBOURS 5
+Nodo* bestn[MAXBESTNEIGHBOURS];
 //LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
 
@@ -161,7 +169,7 @@ void setup() {
   digitalWrite(LEDROSSO, HIGH);
   digitalWrite(LEDBLU, LOW);
   
-  Serial.begin(9600);
+  Serial.begin(250000);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -195,7 +203,9 @@ void setup() {
   tft.println(F("Click corto: Voto"));
   tft.println(F("Effettuare il Discovery"));
   tft.println();
+  for (int i=0;i<MAXBESTNEIGHBOURS;i++) bestn[i]=new Nodo();
   stato.setStato(ZERO);
+  radio._printpackets=false;
 
 
 }
@@ -208,6 +218,34 @@ void loop() {
       digitalWrite(LEDBLU, LOW);
   ElaboraPulsante();
   ElaboraStato();
+}
+
+void CostruisciListaNodi(byte ind, int sign) {
+    // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
+    if(ind==0) return;
+    byte indicemin=0;
+    int minimo=0;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+    if(sign>bestn[indicemin]->segnale) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;};
+    /*    
+    bool giainlista=false;
+    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==ind) {bestn[i]->segnale=sign; giainlista=true;}
+    if(!giainlista) {
+      int minimo=bestn[0]->segnale;
+      byte indicemin=0;
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
+      if(sign>minimo) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;}
+    }
+    */
+    if(radio._printpackets) {
+      Serial.print(F("bestn: "));
+      for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
+        Serial.print(bestn[i]->indirizzo);
+        Serial.print(" ");
+        Serial.println(bestn[i]->segnale);
+        
+      }
+    }
 }
 
 void ProcessaDatiSeriali() {
@@ -272,6 +310,12 @@ void ProcessaDatiSeriali() {
           // stampa il num max di client
           Serial.print(F("ns "));
           Serial.println(numero_max_slave);
+          break;
+        case 'P':
+          // stampa il num max di client
+          radio._printpackets=!radio._printpackets;
+          Serial.print(F("stampapacchetti: "));
+          Serial.println(radio._printpackets);
           break;
       }
       k=0;
@@ -428,32 +472,7 @@ void Voto() {
   }
 }
 
-//algoritmo 7
-bool inviaSync() {
-  tft.fillScreen(BLACK);
-  tft.setCursor(0, 0);
-  tft.println(F("Invio sync"));
-  t_inizio_voto=micros();
-  byte retry;
-  for(byte i=0;i<numero_slave;i++) {
-    retry=0;
-    while(true) {
-      if(TrasmettiPacchettoSync(slave[i]->indirizzo,micros()-t_inizio_voto)) break;
-      retry++;
-      if(retry==10) {
-        stato.setStato(0);
-        Serial.print(F("e Slave non funzionante: "));
-        Serial.println(slave[i]->indirizzo);
-        tft.print(F("Slave non funzionante: "));
-        tft.println(slave[i]->indirizzo);
-        tft.println(F("Controllare o ripetere discovery"));
-	      return false;
-      }
-    }
-  }
-  delay(30);
-  return true;
-}
+
 
 //algoritmo 8
 void PulsanteClickLungo() {
@@ -485,7 +504,6 @@ void interrogaTuttiGliSlave() {
   byte statoslave;
   for(byte i=0;i<numero_slave;i++) {
     if(slave[i]->oravoto==0) {
-      ElaboraPulsante();
       if(interrogaSlaveVoto(slave[i]->indirizzo,&oravoto,&statoslave)) {
         slave[i]->fallimenti=0;
         if(!slave[i]->funzionante) {
@@ -549,7 +567,7 @@ void interrogaTuttiGliSlave() {
   
       } else {
         slave[i]->fallimenti++;
-        if(slave[i]->fallimenti>100) {
+        if(slave[i]->fallimenti>0) {
           if(slave[i]->fallimenti>250) slave[i]->fallimenti=250;
           /*
           Serial.print(slave[i]->indirizzo);
@@ -585,109 +603,173 @@ void AggiornaDisplayKo() {
 
 //algoritmo 15
 bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byte *rssimaster) {
-  byte pkt[1];
-  pkt[0]='d';
-  for(int i=0;i<10;i++) {
-    //Serial.print("tento:");
-    //Serial.println(indirizzo);
-    //radio.send(indirizzo,pkt,1,false);
-    if (!radio.send(indirizzo,pkt,1,false)) {
-      radioSetup();
-      Serial.println(F("e parametro errato")); 
-      tft.println(F("radio send failed"));
-      return false;
-    }
-
+  byte pkt[2],dest;
+  pkt[0]=indirizzo;
+  pkt[1]='d';
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+     if (!radio.send(dest,pkt,2,false)) {
+        radioSetup();
+        return false;
+      }
     unsigned long sentTime = millis();
+    delay(2);
     while (millis() - sentTime < 20) {
       if(radio.receiveDone()) {
         //stampapkt(radio.DATA,radio.PAYLOADLEN);
-        if(radio.DATA[0]=='e') {
-          *livbatt=radio.DATA[1];
-          *rssislave=radio.DATA[2];
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        if(radio.DATA[1]=='e') {
+          *livbatt=radio.DATA[2];
+          *rssislave=radio.DATA[3];
           *rssimaster=radio.RSSI;
           return true;
         }
       }
     }
+    tent++;
+    if(tent==6) break;
+    
   }
   return false;
 }
 
 bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslave) {
-  byte pkt[1];
-  pkt[0]='p';
-  if (!radio.send(indirizzo,pkt,1,false)) {
-    radioSetup();
-    return false;
-  }
-  Serial.print(indirizzo);
-  Serial.print(" : ");
-  unsigned long sentTime = millis();
-  while (millis() - sentTime < 10) {
-    if(radio.receiveDone()) {
-
-
-        if(indirizzo==10) {
-          Serial.println(radio.RSSI);
+  byte pkt[2],dest;
+  pkt[0]=indirizzo;
+  pkt[1]='p';
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+    if(dest!=indirizzo  && radio._printpackets) Serial.print("******"); 
+    if (!radio.send(dest,pkt,2,false)) {
+      radioSetup();
+      return false;
+    }
+    unsigned long sentTime = millis();
+    while (millis() - sentTime < 50) {
+      ElaboraPulsante();
+      if(radio.receiveDone()) {
+        /*
+        Serial.print(F("rxframe: time/sender/target/dati: "));
+        Serial.print(micros());
+        Serial.print("/");
+        Serial.print(radio.SENDERID);
+        Serial.print("/");
+        Serial.print(radio.TARGETID);
+        Serial.print("/D:");
+        for (uint8_t i = 0; i < radio.DATALEN; i++){
+            Serial.print(radio.DATA[i],HEX);
+          Serial.print("/");
+          
         }
-
-
-      
-      //stampapkt(radio.DATA,radio.PAYLOADLEN);
-      if(radio.DATA[0]=='q') {
-        unsigned long t;
-        t=radio.DATA[1];
-        t=t<<24;
-        *oravoto=t;
-        t=radio.DATA[2];
-        t=t<<16;
-        *oravoto+=t;
-        t=radio.DATA[3];
-        t=t<<8;
-        *oravoto+=t;
-        *oravoto+= radio.DATA[4];
-        *statoslave=VOTATO;
-        return true;
-      }
-      // se lo slave per qualche motivo ha perso il sync risponde r
-      // è da considerare non funzionante
-      // caso raro
-      if(radio.DATA[0]=='r') {
-        *oravoto=0;
-        *statoslave=FUORISYNC;
-        return true;
-      }
-      if(radio.DATA[0]=='t') {
-        *oravoto=0;
-        *statoslave=NONVOTATO;
-        return true;
+        Serial.println("");
+        */
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        if(radio.TARGETID==0) {
+          if(radio.DATA[1]=='q') {
+            unsigned long t;
+            t=radio.DATA[2];
+            t=t<<24;
+            *oravoto=t;
+            t=radio.DATA[3];
+            t=t<<16;
+            *oravoto+=t;
+            t=radio.DATA[4];
+            t=t<<8;
+            *oravoto+=t;
+            *oravoto+= radio.DATA[5];
+            *statoslave=VOTATO;
+            return true;
+          }
+          // se lo slave per qualche motivo ha perso il sync risponde r
+          // è da considerare non funzionante
+          // caso raro
+          if(radio.DATA[1]=='r') {
+            *oravoto=0;
+            *statoslave=FUORISYNC;
+            return true;
+          }
+          if(radio.DATA[1]=='t') {
+            *oravoto=0;
+            *statoslave=NONVOTATO;
+            return true;
+          }
+          
+        }
       }
     }
+    tent++;
+    if(tent==6) break;
+    
   }
-          if(indirizzo==10) {
-          Serial.println("ko");
-        }
-
+  Serial.print("ko");
   return false;
 }
 
-//algoritmo 18
-bool TrasmettiPacchettoSync(byte indirizzo, unsigned long t_da_iniziovoto) {
-	char pkt[5];
-	pkt[0]='s';
-	pkt[1]=t_da_iniziovoto >> 24;
-	pkt[2]=(t_da_iniziovoto >> 16) & 0xFF;
-	pkt[3]=(t_da_iniziovoto >> 8) & 0xFF;
-	pkt[4]=(t_da_iniziovoto) & 0xFF;
-	radio.send(indirizzo, pkt, 5);
-  unsigned long sentTime = millis();
-  while (millis() - sentTime < 20) {
-    if(radio.receiveDone()) {
-      if(radio.DATA[0]=='k') {
-        return true;
+//algoritmo 7
+bool inviaSync() {
+  tft.fillScreen(BLACK);
+  tft.setCursor(0, 0);
+  tft.println(F("Invio sync"));
+  t_inizio_voto=micros();
+  byte retry;
+  for(byte i=0;i<numero_slave;i++) {
+    retry=0;
+    while(true) {
+      if(TrasmettiPacchettoSync(slave[i]->indirizzo)) break;
+      retry++;
+      if(retry==10) {
+        stato.setStato(0);
+        Serial.print(F("e Slave non funzionante: "));
+        Serial.println(slave[i]->indirizzo);
+        tft.print(F("Slave non funzionante: "));
+        tft.println(slave[i]->indirizzo);
+        tft.println(F("Controllare o ripetere discovery"));
+        return false;
       }
     }
+  }
+  delay(30);
+  return true;
+}
+
+//algoritmo 18
+bool TrasmettiPacchettoSync(byte indirizzo) {
+	char pkt[6],dest;
+  unsigned long dt;
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+    dt=micros()-t_inizio_voto;
+    pkt[0]=indirizzo;
+    pkt[1]='s';
+    pkt[2]=dt >> 24;
+    pkt[3]=(dt >> 16) & 0xFF;
+    pkt[4]=(dt >> 8) & 0xFF;
+    pkt[5]=(dt) & 0xFF;
+
+    
+    if (!radio.send(dest,pkt,6,false)) {
+      radioSetup();
+      return false;
+    }
+    unsigned long sentTime = millis();
+    while (millis() - sentTime < 20) {
+      if(radio.receiveDone()) {
+        //stampapkt(radio.DATA,radio.PAYLOADLEN);
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        if(radio.DATA[1]=='k') {
+          return true;
+        }
+      }
+    }
+    tent++;
+    if(tent==6) break;
+    
   }
   return false;  
 }
@@ -707,10 +789,11 @@ void radioSetup() {
   */
   radio.writeReg(0x03,0x00); // 153k6
   radio.writeReg(0x04,0xD0);
-  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010010); // data whitening e address filter
+  radio.writeReg(0x37,radio.readReg(0x37) | 0b01010000); // data whitening e no address filter
   radio.setFrequency(FREQUENCY);
   radio.setHighPower(); 
   radio.setPowerLevel(31);
+  radio.promiscuous(true);
 }
 
 
