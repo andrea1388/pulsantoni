@@ -38,6 +38,9 @@
 #define MAGENTA 0xF81F
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
+#define COLORESFONDO BLACK
+#define COLORETESTONORMALE GREEN
+
 
 
 Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
@@ -109,7 +112,7 @@ void Stato::setStato(byte newstato) {
       for(int f=0;f<5;f++) best[f]=0;
       Serial.println(F("s0"));
       tft.setTextSize(2);
-      tft.setTextColor(GREEN);  
+      tft.setTextColor(COLORETESTONORMALE);  
       tft.println(F("Pronto"));
       break;
     case DISCOVERY:
@@ -118,7 +121,7 @@ void Stato::setStato(byte newstato) {
       indirizzo_slave_discovery=1;
       numero_slave=0; // cancella la lista
       Serial.println(F("ds"));
-      tft.fillScreen(BLACK);
+      tft.fillScreen(COLORESFONDO);
       tft.setCursor(0, 0);
       tft.println(F("Discovering"));
       break;
@@ -127,7 +130,7 @@ void Stato::setStato(byte newstato) {
       if(numero_slave==0) {
         Serial.println(F("slave=0"));
         tft.setCursor(0, 0);
-        tft.fillScreen(BLACK);
+        tft.fillScreen(COLORESFONDO);
         tft.println(F("Effettuare discovery"));
         stato=0;
         return;
@@ -139,7 +142,7 @@ void Stato::setStato(byte newstato) {
       for(byte i=0;i<numero_slave;i++)
         slave[i]->oravoto=0;
       Serial.println(F("ip"));
-      tft.fillScreen(BLACK);
+      tft.fillScreen(COLORESFONDO);
       tft.setCursor(0, 0);
       tft.println(F("Voto in corso"));
       break;
@@ -180,14 +183,14 @@ void setup() {
   uint16_t identifier = tft.readID();
   identifier=0x9341;
   tft.begin(identifier);
-  tft.fillScreen(BLACK);
+  tft.fillScreen(COLORESFONDO);
   tft.setCursor(0, 0);
   tft.setTextColor(RED);  
   tft.setTextSize(3);
   tft.setRotation(1);
   tft.println("Pulsantoni");
   tft.setTextSize(2);
-  tft.setTextColor(GREEN);  
+  tft.setTextColor(COLORETESTONORMALE);  
   tft.println();
   tft.print("numero slave: ");
   tft.println(numero_max_slave);
@@ -220,14 +223,10 @@ void loop() {
   ElaboraStato();
 }
 
-void CostruisciListaNodi(byte ind, int sign) {
+void CostruisciListaNodi(byte ind, int sign, byte len) {
     // se il nodo ricevuto è più forte del più debole lo sostituisco con questo
-    if(ind==0) return;
-    byte indicemin=0;
-    int minimo=0;
-    for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
-    if(sign>bestn[indicemin]->segnale) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;};
-    /*    
+    if(ind<0 || ind >slave[numero_slave-1]->indirizzo) return;
+    if(len<2) return;
     bool giainlista=false;
     for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->indirizzo==ind) {bestn[i]->segnale=sign; giainlista=true;}
     if(!giainlista) {
@@ -236,15 +235,21 @@ void CostruisciListaNodi(byte ind, int sign) {
       for (int i=0;i<MAXBESTNEIGHBOURS;i++) if(bestn[i]->segnale<minimo) {minimo=bestn[i]->segnale; indicemin=i;};
       if(sign>minimo) {bestn[indicemin]->segnale=sign; bestn[indicemin]->indirizzo=ind;}
     }
-    */
+    Nodo *tmp;
+    for (int i=0;i<MAXBESTNEIGHBOURS-1;i++) 
+      for (int k=i+1;k<MAXBESTNEIGHBOURS;k++) 
+        if(bestn[i]->segnale<bestn[k]->segnale) {tmp=bestn[k]; bestn[k]=bestn[i]; bestn[i]=tmp;}
+    
     if(radio._printpackets) {
-      Serial.print(F("bestn: "));
+      Serial.print(F("best: i/s "));
       for (int i=0;i<MAXBESTNEIGHBOURS;i++) {
         Serial.print(bestn[i]->indirizzo);
+        Serial.print("/");
+        Serial.print(bestn[i]->segnale);
         Serial.print(" ");
-        Serial.println(bestn[i]->segnale);
         
       }
+      Serial.println(" ");
     }
 }
 
@@ -436,7 +441,7 @@ void Discovery() {
     Serial.print(rssislave);
     Serial.print(" ");
     Serial.println(rssimaster);
-    tft.setTextColor(GREEN);
+    tft.setTextColor(COLORETESTONORMALE);
     tft.print(indirizzo_slave_discovery);
     tft.print(" ");
   } else {
@@ -447,7 +452,7 @@ void Discovery() {
     tft.print(" ");
   }
   if(indirizzo_slave_discovery==numero_max_slave) {
-    tft.setTextColor(GREEN);
+    tft.setTextColor(COLORETESTONORMALE);
     tft.println();
     tft.print(F("Slave trovati: "));
     tft.print(numero_slave);
@@ -588,7 +593,7 @@ void interrogaTuttiGliSlave() {
 void AggiornaDisplayKo() {
   int x=tft.getCursorX();
   int y=tft.getCursorY();
-  tft.fillRect(0,200,320,40,BLACK);
+  tft.fillRect(0,200,320,40,COLORESFONDO);
   tft.setTextColor(RED);
   tft.setCursor(0, 205);
   for (int i=0;i<numero_slave;i++) {
@@ -597,7 +602,7 @@ void AggiornaDisplayKo() {
       tft.print(" ");
     }
   }
-  tft.setTextColor(GREEN);
+  tft.setTextColor(COLORETESTONORMALE);
   tft.setCursor(x, y);  
 }
 
@@ -610,21 +615,23 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
   while(true) {
     if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
     if(dest==255) break;
-     if (!radio.send(dest,pkt,2,false)) {
+    delay(2);
+    if (!radio.send(dest,pkt,2,false)) {
         radioSetup();
         return false;
-      }
+    }
     unsigned long sentTime = millis();
-    delay(2);
-    while (millis() - sentTime < 20) {
+    while (millis() - sentTime < 50) {
       if(radio.receiveDone()) {
         //stampapkt(radio.DATA,radio.PAYLOADLEN);
-        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
-        if(radio.DATA[1]=='e') {
-          *livbatt=radio.DATA[2];
-          *rssislave=radio.DATA[3];
-          *rssimaster=radio.RSSI;
-          return true;
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI,radio.DATALEN);
+        if(radio.TARGETID==0) {
+          if(radio.DATA[1]=='e') {
+            *livbatt=radio.DATA[2];
+            *rssislave=radio.DATA[3];
+            *rssimaster=radio.RSSI;
+            return true;
+          }
         }
       }
     }
@@ -633,6 +640,47 @@ bool interrogaSlaveDiscovery(byte indirizzo, byte *livbatt, byte *rssislave, byt
     
   }
   return false;
+}
+
+bool TrasmettiPacchettoSync(byte indirizzo) {
+  char pkt[6],dest;
+  unsigned long dt;
+  byte tent=0;
+  while(true) {
+    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(dest==255) break;
+    delay(2);
+    dt=micros()-t_inizio_voto;
+    pkt[0]=indirizzo;
+    pkt[1]='s';
+    pkt[2]=dt >> 24;
+    pkt[3]=(dt >> 16) & 0xFF;
+    pkt[4]=(dt >> 8) & 0xFF;
+    pkt[5]=(dt) & 0xFF;
+
+    
+    if (!radio.send(dest,pkt,6,false)) {
+      radioSetup();
+      return false;
+    }
+    unsigned long sentTime = millis();
+    //delay(2);
+    while (millis() - sentTime < 50) {
+      if(radio.receiveDone()) {
+        //stampapkt(radio.DATA,radio.PAYLOADLEN);
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI,radio.DATALEN);
+        if(radio.TARGETID==0) {
+          if(radio.DATA[1]=='k') {
+            return true;
+          }
+        }
+      }
+    }
+    tent++;
+    if(tent==6) break;
+    
+  }
+  return false;  
 }
 
 bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslave) {
@@ -644,6 +692,7 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
     if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
     if(dest==255) break;
     if(dest!=indirizzo  && radio._printpackets) Serial.print("******"); 
+    delay(2);
     if (!radio.send(dest,pkt,2,false)) {
       radioSetup();
       return false;
@@ -652,22 +701,7 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
     while (millis() - sentTime < 50) {
       ElaboraPulsante();
       if(radio.receiveDone()) {
-        /*
-        Serial.print(F("rxframe: time/sender/target/dati: "));
-        Serial.print(micros());
-        Serial.print("/");
-        Serial.print(radio.SENDERID);
-        Serial.print("/");
-        Serial.print(radio.TARGETID);
-        Serial.print("/D:");
-        for (uint8_t i = 0; i < radio.DATALEN; i++){
-            Serial.print(radio.DATA[i],HEX);
-          Serial.print("/");
-          
-        }
-        Serial.println("");
-        */
-        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
+        CostruisciListaNodi(radio.SENDERID, radio.RSSI,radio.DATALEN);
         if(radio.TARGETID==0) {
           if(radio.DATA[1]=='q') {
             unsigned long t;
@@ -705,13 +739,12 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
     if(tent==6) break;
     
   }
-  Serial.print("ko");
   return false;
 }
 
 //algoritmo 7
 bool inviaSync() {
-  tft.fillScreen(BLACK);
+  tft.fillScreen(COLORESFONDO);
   tft.setCursor(0, 0);
   tft.println(F("Invio sync"));
   t_inizio_voto=micros();
@@ -732,47 +765,10 @@ bool inviaSync() {
       }
     }
   }
-  delay(30);
   return true;
 }
 
-//algoritmo 18
-bool TrasmettiPacchettoSync(byte indirizzo) {
-	char pkt[6],dest;
-  unsigned long dt;
-  byte tent=0;
-  while(true) {
-    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
-    if(dest==255) break;
-    dt=micros()-t_inizio_voto;
-    pkt[0]=indirizzo;
-    pkt[1]='s';
-    pkt[2]=dt >> 24;
-    pkt[3]=(dt >> 16) & 0xFF;
-    pkt[4]=(dt >> 8) & 0xFF;
-    pkt[5]=(dt) & 0xFF;
 
-    
-    if (!radio.send(dest,pkt,6,false)) {
-      radioSetup();
-      return false;
-    }
-    unsigned long sentTime = millis();
-    while (millis() - sentTime < 20) {
-      if(radio.receiveDone()) {
-        //stampapkt(radio.DATA,radio.PAYLOADLEN);
-        CostruisciListaNodi(radio.SENDERID, radio.RSSI);
-        if(radio.DATA[1]=='k') {
-          return true;
-        }
-      }
-    }
-    tent++;
-    if(tent==6) break;
-    
-  }
-  return false;  
-}
 
 void radioSetup() {
   // Hard Reset the RFM module 
@@ -802,10 +798,10 @@ void radioSetup() {
 //algoritmo 11
 // chiamato ad ogni giro di poll
 void MostraRisultatiVoto() {
-  tft.fillScreen(BLACK);
+  tft.fillScreen(COLORESFONDO);
   tft.setCursor(0, 0);
   tft.setTextSize(3);
-  tft.setTextColor(GREEN);
+  tft.setTextColor(COLORETESTONORMALE);
   tft.println(F("Risultati voto:"));
   tft.println();
   for(int f=0;f<5;f++) {
@@ -833,7 +829,7 @@ void MostraRisultatiVoto() {
     }
   }
   tft.setTextSize(2);
-  tft.setTextColor(GREEN);
+  tft.setTextColor(COLORETESTONORMALE);
   tft.println();
 }
 
