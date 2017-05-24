@@ -172,7 +172,7 @@ void setup() {
   digitalWrite(LEDROSSO, HIGH);
   digitalWrite(LEDBLU, LOW);
   
-  Serial.begin(250000);
+  Serial.begin(9600);
   Serial.print(F("ns "));
   //lcd.begin(16, 2);
   numero_max_slave=EEPROM.read(1);
@@ -532,22 +532,6 @@ void interrogaTuttiGliSlave() {
           Serial.println(oravoto);
           
           // ordina i 5 migliori
-          /*
-          for(int y=0;y<5;y++) {
-            if(best[y]!=0) {
-              if(oravoto<best[y]->oravoto) {
-                for(int f=y;f<4;f++) {
-                  if(best[f]!=0) best[f+1]=best[f];
-                }
-                //best[y]=slave[i];
-                break;
-              };
-            } else {
-              best[y]=slave[i];
-              break;
-            }
-          }
-          */
           for(int y=0;y<5;y++) {
             if(best[y]==0) {
               best[y]=slave[i];
@@ -555,11 +539,8 @@ void interrogaTuttiGliSlave() {
             }
             else {
               if(oravoto<best[y]->oravoto) {
-                for(int f=y;f<4;f++) {
-                  if(best[f]!=0)
-                     best[f+1]=best[f];
-                     break;
-                }
+                for(int f=4;f>y;f--)
+                     best[f]=best[f-1];
                 best[y]=slave[i];
                 break;
               }
@@ -772,7 +753,7 @@ bool inviaSync() {
 
 void radioSetup() {
   // Hard Reset the RFM module 
-  Serial.println("radiosetup");
+  Serial.println("e radiosetup");
   pinMode(RFM69_RST, OUTPUT); 
   digitalWrite(RFM69_RST, HIGH); 
   delay(100);
@@ -805,8 +786,15 @@ void MostraRisultatiVoto() {
   tft.println(F("Risultati voto:"));
   tft.println();
   for(int f=0;f<5;f++) {
-    if(best[f]!=0) {
     
+    if(best[f]!=0) {
+      /*
+      Serial.print(f);
+      Serial.print(" ");
+      Serial.print(best[f]->indirizzo);
+      Serial.print(" ");
+      Serial.print(best[f]->oravoto);
+      */
       if(f==0) {
           tft.setTextColor(RED);  
       }
@@ -814,9 +802,9 @@ void MostraRisultatiVoto() {
           tft.setTextColor(CYAN);  
       }
       int ovi=best[f]->oravoto/1000000;
-      int ovd=(best[f]->oravoto-ovi*1000000)/1000;
+      int ovd=(best[f]->oravoto-ovi*1000000)/100;
       char str[25];
-      sprintf(str, " %3d %3d,%03d",best[f]->indirizzo,ovi,ovd);
+      sprintf(str, " %3d %3d,%04d",best[f]->indirizzo,ovi,ovd);
       /*
       tft.print(f+1);
       tft.print(": ");
@@ -827,7 +815,15 @@ void MostraRisultatiVoto() {
       */
       tft.println(str);
     }
+    /*
+    else {
+      Serial.print(f);
+      Serial.print(" 0");
+
+    }
+    */
   }
+  //Serial.println("");
   tft.setTextSize(2);
   tft.setTextColor(COLORETESTONORMALE);
   tft.println();
