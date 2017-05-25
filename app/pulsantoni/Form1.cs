@@ -6,8 +6,6 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
-using System.Collections;
-
 
 namespace pulsantoni
 {
@@ -20,6 +18,7 @@ namespace pulsantoni
     
     {
         FVoto fv;
+        
         public Form1()
         {
             InitializeComponent();
@@ -49,11 +48,9 @@ namespace pulsantoni
             lv1.CheckBoxes = true;
             lv2.Columns.Add("Device number", -2, HorizontalAlignment.Center);
             lv2.View = View.Details;
-            //lv1.ListViewItemSorter = new ListViewItemComparer(1);
-            //lv2.ListViewItemSorter = new ListViewItemComparer(1);
-
             fv = new FVoto();
             fv.Owner = this;
+            Program.chiusura = false;
 
 
         }
@@ -64,7 +61,7 @@ namespace pulsantoni
         void NuovoClient(object sender, DiscoveryEventArgs e)
         {
             String ovs = e.batteria .ToString("#.#");
-            ListViewItem i = new ListViewItem(e.indirizzo.ToString("00"));
+            ListViewItem i = new ListViewItem(e.indirizzo.ToString());
             i.SubItems.Add(ovs);
             i.SubItems.Add(e.rssislave .ToString());
             i.SubItems.Add(e.rssimaster.ToString());
@@ -84,16 +81,20 @@ namespace pulsantoni
         {
             float ov = (float)e.oravoto / (float)1000000;
             String ovs=ov.ToString("0.0000");
+            //String ovs = ov.ToString();
             ListViewItem i = new ListViewItem(" ");
             i.SubItems.Add(e.indirizzo.ToString());
             i.SubItems.Add(ovs);
+            //if(isnothing(fv)) fv = new FVoto();
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Add(i); });
+            this.Invoke((MethodInvoker)delegate { fv.primorosso(); });
         }
         void RaggiuntoStato0(object sender, EventArgs e)
         {
             SetText("Ready", TBStato );
             this.Invoke((MethodInvoker)delegate { fv.lstato.Text = "Poll ended"; });
             this.Invoke((MethodInvoker)delegate {  fv.bstoppoll.Text  = "Start Poll"; });
+            this.Invoke((MethodInvoker)delegate { fv.lstato.ForeColor = Color.Green; });
         }
         void InviaSync(object sender, EventArgs e)
         {
@@ -106,6 +107,7 @@ namespace pulsantoni
             this.Invoke((MethodInvoker)delegate { fv.lvoti.Items.Clear(); });
             SetText("Poll started", TBStato);
             this.Invoke((MethodInvoker)delegate { fv.bstoppoll.Text = "Stop Poll"; });
+            this.Invoke((MethodInvoker)delegate { fv.lstato.ForeColor=Color.Red; });
         }
         void IniziatoDiscovery(object sender, EventArgs e)
         {
@@ -177,6 +179,13 @@ namespace pulsantoni
             try
             {
                 Program.master.Open();
+                this.FormBorderStyle = FormBorderStyle.FixedSingle;
+                this.MinimizeBox = false;
+                this.MaximizeBox = false;
+                this.Location=new Point (0, 0);
+                //this.Size = Screen.PrimaryScreen.Bounds.Size;
+                this.Width=Screen.PrimaryScreen.Bounds.Width;
+                this.Height  = Screen.PrimaryScreen.Bounds.Height ;
             }
             catch(Exception ex)
             {
@@ -203,6 +212,7 @@ namespace pulsantoni
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             Program.master.Close();
+            Program.chiusura = true;
         }
 
         private void BIniziaVoto_Click(object sender, EventArgs e)
@@ -238,37 +248,4 @@ namespace pulsantoni
             Program.master.StopDiscovery();
         }
     }
-    class ListViewItemComparer : IComparer
-    {
-        private int col;
-        /*
-        public ListViewItemComparer()
-        {
-            col = 0;
-        }
-        */
-        public ListViewItemComparer(int column)
-        {
-            col = column;
-        }
-        public int Compare(object x, object y)
-        {
-            float xi, yi;
-            try
-            {
-                ListViewItem xl = (ListViewItem)x;
-                ListViewItem yl = (ListViewItem)y;
-
-                xi = int.Parse(xl.SubItems[col].Text);
-                yi = int.Parse(yl.SubItems[col].Text);
-                if (xi > yi) return 1;
-                if (xi < yi) return -1;
-
-            }
-            catch { };
-            return 0;
-            // positivo se x>1, 0 se uguai, neg else
-        }
-    }
-
 }

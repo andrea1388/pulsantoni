@@ -10,6 +10,7 @@ namespace pulsantoni
     static class Program
     {
         public static MasterClass master;
+        public static bool chiusura;
         /// <summary>
         /// The main entry point for the application.
         /// </summary>

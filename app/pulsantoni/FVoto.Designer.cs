@@ -28,24 +28,11 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.lstato = new System.Windows.Forms.TextBox();
             this.BClose = new System.Windows.Forms.Button();
             this.lvoti = new System.Windows.Forms.ListView();
             this.bstoppoll = new System.Windows.Forms.Button();
+            this.lstato = new System.Windows.Forms.Label();
             this.SuspendLayout();
-            // 
-            // lstato
-            // 
-            this.lstato.BackColor = System.Drawing.SystemColors.ButtonFace;
-            this.lstato.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.lstato.Font = new System.Drawing.Font("Microsoft Sans Serif", 40F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.lstato.Location = new System.Drawing.Point(135, 12);
-            this.lstato.Margin = new System.Windows.Forms.Padding(4);
-            this.lstato.Name = "lstato";
-            this.lstato.ReadOnly = true;
-            this.lstato.Size = new System.Drawing.Size(467, 61);
-            this.lstato.TabIndex = 8;
-            this.lstato.Text = ".............";
             // 
             // BClose
             // 
@@ -65,7 +52,7 @@
             this.lvoti.Font = new System.Drawing.Font("Microsoft Sans Serif", 30F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lvoti.GridLines = true;
             this.lvoti.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
-            this.lvoti.Location = new System.Drawing.Point(0, 139);
+            this.lvoti.Location = new System.Drawing.Point(0, 131);
             this.lvoti.Margin = new System.Windows.Forms.Padding(4);
             this.lvoti.MultiSelect = false;
             this.lvoti.Name = "lvoti";
@@ -86,23 +73,36 @@
             this.bstoppoll.UseVisualStyleBackColor = true;
             this.bstoppoll.Click += new System.EventHandler(this.bstoppoll_Click);
             // 
+            // lstato
+            // 
+            this.lstato.AutoSize = true;
+            this.lstato.Font = new System.Drawing.Font("Microsoft Sans Serif", 40F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lstato.Location = new System.Drawing.Point(12, 13);
+            this.lstato.Name = "lstato";
+            this.lstato.Size = new System.Drawing.Size(173, 63);
+            this.lstato.TabIndex = 13;
+            this.lstato.Text = "label1";
+            // 
             // FVoto
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1636, 905);
+            this.ClientSize = new System.Drawing.Size(1636, 897);
             this.ControlBox = false;
+            this.Controls.Add(this.lstato);
             this.Controls.Add(this.bstoppoll);
             this.Controls.Add(this.lvoti);
             this.Controls.Add(this.BClose);
-            this.Controls.Add(this.lstato);
             this.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Margin = new System.Windows.Forms.Padding(4);
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
             this.Name = "FVoto";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Poll Window";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FVoto_FormClosing);
             this.Load += new System.EventHandler(this.FVoto_Load);
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -110,9 +110,9 @@
         }
 
         #endregion
-        public System.Windows.Forms.TextBox lstato;
         private System.Windows.Forms.Button BClose;
         public System.Windows.Forms.ListView lvoti;
         public System.Windows.Forms.Button bstoppoll;
+        public System.Windows.Forms.Label lstato;
     }
 }

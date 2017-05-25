@@ -1,2 +1,2 @@
-﻿porta=COM28
+﻿porta=COM1
 baudrate=9600
