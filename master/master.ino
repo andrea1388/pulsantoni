@@ -80,10 +80,12 @@ class Slave {
     //byte rssi;
     bool funzionante;
     byte indirizzo;
+    byte best[5];
     Slave(byte);
 };
 Slave::Slave(byte ind) {
   indirizzo=ind;
+  for(byte i=0;i<5;i++) best[i]=0;
 }
 
 Slave** slave;
@@ -670,7 +672,7 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
   pkt[1]='p';
   byte tent=0;
   while(true) {
-    if(tent==0) dest=indirizzo; else dest=bestn[tent-1]->indirizzo;
+    if(tent==0) dest=indirizzo; else dest=IndirizzoMigliorRipetitore(indirizzo,tent);
     if(dest==255) break;
     if(dest!=indirizzo  && radio._printpackets) Serial.print("******"); 
     delay(2);
@@ -710,6 +712,11 @@ bool interrogaSlaveVoto(byte indirizzo, unsigned long* oravoto, byte * statoslav
           if(radio.DATA[1]=='t') {
             *oravoto=0;
             *statoslave=NONVOTATO;
+            slave[indirizzo]->best[0]=radio.DATA[2];
+            slave[indirizzo]->best[1]=radio.DATA[3];
+            slave[indirizzo]->best[2]=radio.DATA[4];
+            slave[indirizzo]->best[3]=radio.DATA[5];
+            slave[indirizzo]->best[4]=radio.DATA[6];
             return true;
           }
           
@@ -843,3 +850,9 @@ void stampapkt(byte *pkt,int len) {
     
 }
 
+byte IndirizzoMigliorRipetitore(byte destinatario,byte tentativo) {
+  if(tentativo==1) {
+    if
+  }
+
+}
